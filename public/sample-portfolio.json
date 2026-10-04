@@ -1,0 +1,11 @@
+{
+  "description": "Demo holdings for Portfolio Tracker. Buy prices are illustrative.",
+  "lots": [
+    { "symbol": "AAPL", "shares": 15, "buyPrice": 172.4, "buyDate": "2024-03-11" },
+    { "symbol": "AAPL", "shares": 5, "buyPrice": 215.1, "buyDate": "2025-06-02", "fees": 1 },
+    { "symbol": "MSFT", "shares": 8, "buyPrice": 405.25, "buyDate": "2024-08-19" },
+    { "symbol": "NVDA", "shares": 30, "buyPrice": 118.6, "buyDate": "2025-01-27" },
+    { "symbol": "VOO", "shares": 12, "buyPrice": 470, "buyDate": "2024-11-04" },
+    { "symbol": "KO", "shares": 25, "buyPrice": 63.8, "buyDate": "2025-02-14", "notes": "Dividend holding" }
+  ]
+}
