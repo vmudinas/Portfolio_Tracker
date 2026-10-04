@@ -30,7 +30,7 @@ async function addLot(user: ReturnType<typeof userEvent.setup>, symbol: string, 
   await user.type(within(dialog).getByLabelText(/price paid/i), price)
   await user.click(within(dialog).getByRole('button', { name: 'Add purchase' }))
   // let the (fake) price fetch settle so React state updates happen inside the test
-  await screen.findByText(/prices updated/i)
+  await screen.findByText(/prices updated|last regular-session prices/i)
 }
 
 describe('App', () => {
@@ -86,6 +86,59 @@ describe('App', () => {
     unmount()
     render(<App providerFactory={factory} />)
     expect(within(screen.getByRole('table')).getByText('AAPL')).toBeInTheDocument()
+    await screen.findByText(/prices updated/i)
+  })
+
+  it('shows after-hours moves from the trade stream', async () => {
+    withKey()
+    const user = userEvent.setup()
+    const afterHours: QuoteProvider = {
+      ...fakeProvider,
+      getQuote: async (sym) => ({ ...(await fakeProvider.getQuote(sym))!, updatedAt: '2026-10-02T20:00:00Z' }),
+      getMarketStatus: async () => ({ session: 'post', holiday: null }),
+      streamTrades: (symbols, onTrade) => {
+        const t = setTimeout(
+          () => symbols.forEach((s) => onTrade({ symbol: s, price: prices[s] * 1.1, time: Date.now() })),
+          10,
+        )
+        return () => clearTimeout(t)
+      },
+    }
+    render(<App providerFactory={() => afterHours} />)
+    await addLot(user, 'AAPL', '10', '150')
+    await waitFor(() => expect(screen.getByLabelText('Portfolio summary')).toHaveTextContent('After hours +$200.00'), {
+      timeout: 3000,
+    })
+    expect(within(screen.getByRole('table')).getByText('+10.00%')).toBeInTheDocument()
+    expect(screen.getAllByText('After hours').length).toBeGreaterThan(0) // market badge
+  })
+
+  it('shows the optional trends chart', async () => {
+    withKey()
+    const user = userEvent.setup()
+    const history = {
+      name: 'fake',
+      getHistory: async () => {
+        const d = (n: number) => new Date(Date.now() - n * 86400000).toISOString().slice(0, 10)
+        return [
+          { date: d(20), close: 100 },
+          { date: d(1), close: 125 },
+        ]
+      },
+    }
+    const { unmount } = render(<App providerFactory={factory} />)
+    await addLot(user, 'AAPL', '1', '100')
+    await user.click(screen.getByRole('button', { name: /chart/i }))
+    // the chart module is lazy-loaded, so allow time for the import
+    expect(await screen.findByRole('button', { name: 'Add Twelve Data key' }, { timeout: 5000 })).toBeInTheDocument()
+    unmount()
+
+    const s = JSON.parse(localStorage.getItem('portfolio-tracker:v1')!)
+    s.settings.twelveDataApiKey = 'td'
+    localStorage.setItem('portfolio-tracker:v1', JSON.stringify(s))
+    render(<App providerFactory={factory} historyFactory={() => history} />)
+    const picker = await screen.findByRole('group', { name: 'Stocks to chart' }, { timeout: 5000 })
+    await waitFor(() => expect(within(picker).getByRole('button', { name: /AAPL/ })).toHaveTextContent('+25.00%'))
     await screen.findByText(/prices updated/i)
   })
 })

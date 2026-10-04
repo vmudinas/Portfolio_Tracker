@@ -1,15 +1,20 @@
-import { useMemo, useState } from 'react'
+import { lazy, Suspense, useMemo, useState } from 'react'
 import { EmptyState } from './components/EmptyState'
 import { HoldingsTable } from './components/HoldingsTable'
 import { LotForm } from './components/LotForm'
+import { MarketBadge } from './components/MarketBadge'
 import { ProfileSwitcher } from './components/ProfileSwitcher'
 import { SettingsDialog } from './components/SettingsDialog'
 import { SummaryCards } from './components/SummaryCards'
 import { Button } from './components/ui'
+import { useExtendedHours } from './hooks/useExtendedHours'
+import { useMarketStatus } from './hooks/useMarketStatus'
 import { useQuotes } from './hooks/useQuotes'
-import { buildPositions, summarize } from './lib/portfolio'
+import { buildPositions, summarize, visibleExtended } from './lib/portfolio'
 import { defaultState, parseState } from './lib/storage'
 import { createFinnhubProvider } from './providers/finnhub'
+import type { HistoryProvider } from './providers/HistoryProvider'
+import { createTwelveDataProvider } from './providers/twelveData'
 import type { QuoteProvider } from './providers/QuoteProvider'
 import { activeProfile } from './state/reducer'
 import { useAppState } from './state/useAppState'
@@ -17,12 +22,16 @@ import type { Lot } from './types'
 
 type Editing = { lot?: Lot; symbol?: string } | null
 
+// Charts are loaded only when opened, keeping the first page load small.
+const TrendsPanel = lazy(() => import('./components/TrendsPanel'))
+
 interface Props {
   /** Injected in tests; defaults to Finnhub with the user's key. */
   providerFactory?: (apiKey: string) => QuoteProvider
+  historyFactory?: (apiKey: string) => HistoryProvider
 }
 
-function App({ providerFactory = createFinnhubProvider }: Props) {
+function App({ providerFactory = createFinnhubProvider, historyFactory = createTwelveDataProvider }: Props) {
   const [state, dispatch] = useAppState()
   const [editing, setEditing] = useState<Editing>(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
@@ -31,15 +40,23 @@ function App({ providerFactory = createFinnhubProvider }: Props) {
   const profile = activeProfile(state)
   const apiKey = state.settings.finnhubApiKey
   const provider = useMemo(() => (apiKey ? providerFactory(apiKey) : null), [apiKey, providerFactory])
+  const tdKey = state.settings.twelveDataApiKey
+  const historyProvider = useMemo(() => (tdKey ? historyFactory(tdKey) : null), [tdKey, historyFactory])
+  const showTrends = !!state.settings.showTrends
 
   const symbols = useMemo(() => [...new Set(profile.lots.map((l) => l.symbol))], [profile.lots])
+  const market = useMarketStatus(provider)
+  const session = market?.session ?? null
   const { quotes, unknown, error, loading, lastUpdated, refresh } = useQuotes(
     symbols,
     provider,
     state.settings.refreshSeconds,
+    session,
   )
+  const extendedAll = useExtendedHours(symbols, provider, session)
+  const extended = useMemo(() => visibleExtended(extendedAll, quotes, session), [extendedAll, quotes, session])
 
-  const positions = useMemo(() => buildPositions(profile.lots, quotes), [profile.lots, quotes])
+  const positions = useMemo(() => buildPositions(profile.lots, quotes, extended), [profile.lots, quotes, extended])
   const summary = useMemo(() => summarize(positions), [positions])
 
   const loadSample = async () => {
@@ -99,17 +116,26 @@ function App({ providerFactory = createFinnhubProvider }: Props) {
           <>
             <SummaryCards summary={summary} />
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <p className="text-xs text-slate-500" aria-live="polite">
+              <p className="flex flex-wrap items-center gap-2 text-xs text-slate-500" aria-live="polite">
+                <MarketBadge status={market} />
                 {loading
                   ? 'Updating prices…'
                   : lastUpdated
-                    ? `Prices updated ${lastUpdated.toLocaleTimeString()} · may be delayed`
+                    ? session === 'regular' || session === null
+                      ? `Prices updated ${lastUpdated.toLocaleTimeString()} · may be delayed`
+                      : `Last regular-session prices · auto-refresh paused until the market opens`
                     : apiKey
                       ? 'Loading prices…'
                       : 'Prices not loaded'}
                 {summary.missingQuotes.length > 0 && !loading && ` · no price for ${summary.missingQuotes.join(', ')}`}
               </p>
               <div className="flex gap-2">
+                <Button
+                  aria-pressed={showTrends}
+                  onClick={() => dispatch({ type: 'settings/update', settings: { showTrends: !showTrends } })}
+                >
+                  {showTrends ? 'Hide chart' : '📈 Chart'}
+                </Button>
                 <Button onClick={refresh} disabled={!provider || loading}>
                   ↻ Refresh
                 </Button>
@@ -118,6 +144,17 @@ function App({ providerFactory = createFinnhubProvider }: Props) {
                 </Button>
               </div>
             </div>
+            {showTrends && (
+              <Suspense fallback={<p className="text-sm text-slate-500">Loading chart…</p>}>
+                <TrendsPanel
+                  symbols={[...positions]
+                    .sort((a, b) => (b.marketValue ?? 0) - (a.marketValue ?? 0))
+                    .map((p) => p.symbol)}
+                  provider={historyProvider}
+                  onOpenSettings={() => setSettingsOpen(true)}
+                />
+              </Suspense>
+            )}
             <HoldingsTable
               positions={positions}
               unknown={unknown}

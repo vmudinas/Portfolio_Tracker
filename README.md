@@ -13,7 +13,9 @@ Enter a stock symbol, how many shares you bought, and the price you paid. Portfo
 - Current prices from the Finnhub market-data API
 - Per-position and total **gain / loss** in dollars and percent
 - Portfolio totals: cost basis, market value, today's change
-- Allocation chart and performance chart (planned)
+- Market-aware refresh: prices update every minute only while the market is open
+- Pre-market and after-hours prices and changes (live Finnhub trade stream, when available)
+- Optional **Trends** chart: pick stocks, choose 1M–5Y, compare % change or price (needs a free Twelve Data key)
 - Multiple local profiles (no login) — switch between portfolios
 - Edit / delete purchases, JSON backup export/import (CSV planned)
 
@@ -32,7 +34,7 @@ Live site (after first deploy): https://vmudinas.github.io/Portfolio_Tracker/
 
 ## Project status
 
-Core app working: profiles, add/edit/delete purchases, Finnhub prices, gain/loss table and summary, JSON backup. Charts and CSV are next. See [docs/PLAN.md](docs/PLAN.md).
+Working: profiles, purchases, gain/loss, market-hours aware prices with pre/after-hours moves, optional trends chart, JSON backup. CSV import/export is next. See [docs/PLAN.md](docs/PLAN.md).
 
 ## Development
 
@@ -53,6 +55,7 @@ npm run build      # production build in dist/
 1. Get a free API key at [finnhub.io/register](https://finnhub.io/register).
 2. Open the site → **Settings** → paste the key → Save. It is stored only in your browser.
 3. **+ Add stock** (or **Load sample portfolio**). Use the profile menu to create separate portfolios.
+4. Optional: add a free [Twelve Data](https://twelvedata.com/register) key in Settings, then click **📈 Chart**.
 
 ## Deployment
 

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { ProviderError, type QuoteProvider } from '../providers/QuoteProvider'
-import type { Quote } from '../types'
+import type { MarketSession, Quote } from '../types'
+import { useVisibleInterval } from './useVisibleInterval'
 
 const CACHE_KEY = 'portfolio-tracker:quotes'
 const BATCH = 5
@@ -33,10 +34,18 @@ export interface QuotesState {
 }
 
 /**
- * Fetch quotes for `symbols`, refreshing every `refreshSeconds` while the tab is visible.
- * Last known prices are cached in localStorage so a reload shows numbers immediately.
+ * Regular-session quotes for `symbols`.
+ * - Regular session (or unknown): refresh every `refreshSeconds` while the tab is visible.
+ * - Pre/post/closed: fetch each symbol once per page load, then stop — prices don't change.
+ * - When the regular session ends, fetch once more to pick up the closing price.
+ * Last prices are cached in localStorage so a reload shows numbers immediately.
  */
-export function useQuotes(symbols: string[], provider: QuoteProvider | null, refreshSeconds: number): QuotesState {
+export function useQuotes(
+  symbols: string[],
+  provider: QuoteProvider | null,
+  refreshSeconds: number,
+  session: MarketSession | null = null,
+): QuotesState {
   const [quotes, setQuotes] = useState<Record<string, Quote>>(readCache)
   const [unknown, setUnknown] = useState<string[]>([])
   const [error, setError] = useState<string | null>(null)
@@ -44,8 +53,9 @@ export function useQuotes(symbols: string[], provider: QuoteProvider | null, ref
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
   const [tick, setTick] = useState(0)
   const forceRef = useRef(false)
-  // When each symbol was last fetched; only used to decide what is due, so no re-render needed.
+  // When each symbol was last fetched in this page load; only used to decide what is due.
   const fetchedAtRef = useRef<Record<string, number>>({})
+  const live = session === 'regular' || session === null
 
   const key = [...new Set(symbols)].sort().join(',')
 
@@ -54,19 +64,20 @@ export function useQuotes(symbols: string[], provider: QuoteProvider | null, ref
     setTick((t) => t + 1)
   }, [])
 
-  // Periodic refresh while visible.
+  const bump = useCallback(() => setTick((t) => t + 1), [])
+  useVisibleInterval(bump, provider && live ? refreshSeconds * 1000 : null)
+
+  // Session changes: entering regular → refresh now; leaving regular → one last fetch for the close.
+  const prevSession = useRef(session)
   useEffect(() => {
-    if (!provider) return
-    const id = setInterval(() => {
-      if (document.visibilityState === 'visible') setTick((t) => t + 1)
-    }, refreshSeconds * 1000)
-    const onVisible = () => document.visibilityState === 'visible' && setTick((t) => t + 1)
-    document.addEventListener('visibilitychange', onVisible)
-    return () => {
-      clearInterval(id)
-      document.removeEventListener('visibilitychange', onVisible)
+    const prev = prevSession.current
+    prevSession.current = session
+    if (prev === session || prev === null) return
+    if (prev === 'regular' || session === 'regular') {
+      forceRef.current = true
+      setTick((t) => t + 1)
     }
-  }, [provider, refreshSeconds])
+  }, [session])
 
   useEffect(() => {
     if (!provider || !key) return
@@ -74,9 +85,12 @@ export function useQuotes(symbols: string[], provider: QuoteProvider | null, ref
     const force = forceRef.current
     forceRef.current = false
     const now = Date.now()
-    const due = key
-      .split(',')
-      .filter((s) => force || now - (fetchedAtRef.current[s] ?? 0) >= refreshSeconds * 1000 - 1000)
+    const due = key.split(',').filter((s) => {
+      if (force) return true
+      const last = fetchedAtRef.current[s]
+      if (last === undefined) return true
+      return live && now - last >= refreshSeconds * 1000 - 1000
+    })
     if (due.length === 0) return
 
     void (async () => {
@@ -120,7 +134,7 @@ export function useQuotes(symbols: string[], provider: QuoteProvider | null, ref
       cancelled = true
       setLoading(false)
     }
-  }, [provider, key, tick, refreshSeconds])
+  }, [provider, key, tick, refreshSeconds, live])
 
   return { quotes, unknown, error, loading, lastUpdated, refresh }
 }

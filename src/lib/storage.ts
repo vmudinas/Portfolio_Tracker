@@ -58,6 +58,10 @@ export function parseState(raw: unknown): AppState | null {
   const settings: Settings = {
     refreshSeconds: Number.isFinite(refresh) && refresh >= 15 ? refresh : DEFAULT_SETTINGS.refreshSeconds,
     ...(typeof s.finnhubApiKey === 'string' && s.finnhubApiKey.trim() ? { finnhubApiKey: s.finnhubApiKey.trim() } : {}),
+    ...(typeof s.twelveDataApiKey === 'string' && s.twelveDataApiKey.trim()
+      ? { twelveDataApiKey: s.twelveDataApiKey.trim() }
+      : {}),
+    ...(typeof s.showTrends === 'boolean' ? { showTrends: s.showTrends } : {}),
   }
   const activeProfileId =
     typeof raw.activeProfileId === 'string' && profiles.some((p) => p.id === raw.activeProfileId)
@@ -84,8 +88,8 @@ export function saveState(state: AppState): void {
   }
 }
 
-/** JSON for the "Export" button. The API key is left out so backups are safe to share. */
+/** JSON for the "Export" button. API keys are left out so backups are safe to share. */
 export function exportState(state: AppState): string {
-  const settings: Settings = { refreshSeconds: state.settings.refreshSeconds }
+  const settings: Settings = { refreshSeconds: state.settings.refreshSeconds, showTrends: state.settings.showTrends }
   return JSON.stringify({ ...state, settings }, null, 2)
 }

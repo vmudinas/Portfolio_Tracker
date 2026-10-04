@@ -13,6 +13,7 @@ interface Props {
 
 export function SettingsDialog({ state, onSave, onImport, onClearAll, onClose }: Props) {
   const [apiKey, setApiKey] = useState(state.settings.finnhubApiKey ?? '')
+  const [tdKey, setTdKey] = useState(state.settings.twelveDataApiKey ?? '')
   const [showKey, setShowKey] = useState(false)
   const [refresh, setRefresh] = useState(String(state.settings.refreshSeconds))
   const [message, setMessage] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null)
@@ -20,7 +21,11 @@ export function SettingsDialog({ state, onSave, onImport, onClearAll, onClose }:
   const fileRef = useRef<HTMLInputElement>(null)
 
   const save = () => {
-    onSave({ finnhubApiKey: apiKey.trim() || undefined, refreshSeconds: Number(refresh) })
+    onSave({
+      finnhubApiKey: apiKey.trim() || undefined,
+      twelveDataApiKey: tdKey.trim() || undefined,
+      refreshSeconds: Number(refresh),
+    })
     onClose()
   }
 
@@ -38,8 +43,15 @@ export function SettingsDialog({ state, onSave, onImport, onClearAll, onClose }:
     try {
       const parsed = parseState(JSON.parse(await file.text()))
       if (!parsed) throw new Error('bad file')
-      // Keep this browser's API key; backups never contain it.
-      onImport({ ...parsed, settings: { ...parsed.settings, finnhubApiKey: state.settings.finnhubApiKey } })
+      // Keep this browser's API keys; backups never contain them.
+      onImport({
+        ...parsed,
+        settings: {
+          ...parsed.settings,
+          finnhubApiKey: state.settings.finnhubApiKey,
+          twelveDataApiKey: state.settings.twelveDataApiKey,
+        },
+      })
       setMessage({ kind: 'ok', text: `Imported ${parsed.profiles.length} profile(s).` })
     } catch {
       setMessage({ kind: 'error', text: 'That file is not a Portfolio Tracker backup.' })
@@ -78,6 +90,34 @@ export function SettingsDialog({ state, onSave, onImport, onClearAll, onClose }:
             />
             <Button onClick={() => setShowKey((s) => !s)}>{showKey ? 'Hide' : 'Show'}</Button>
           </div>
+        </Field>
+
+        <Field
+          label="Twelve Data API key (optional, for charts)"
+          hint={
+            <>
+              Free at{' '}
+              <a
+                className="text-teal-700 underline dark:text-teal-400"
+                href="https://twelvedata.com/register"
+                target="_blank"
+                rel="noreferrer"
+              >
+                twelvedata.com
+              </a>
+              . Used only for price history in the Trends chart.
+            </>
+          }
+        >
+          <input
+            className={inputClass}
+            type={showKey ? 'text' : 'password'}
+            value={tdKey}
+            onChange={(e) => setTdKey(e.target.value)}
+            placeholder="Paste your Twelve Data key"
+            autoComplete="off"
+            spellCheck={false}
+          />
         </Field>
 
         <Field label="Refresh prices every">
