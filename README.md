@@ -8,16 +8,17 @@ Enter a stock symbol, how many shares you bought, and the price you paid. Portfo
 
 ## Features
 
-- Add any number of stocks by ticker symbol (e.g. `AAPL`, `MSFT`, `TSLA`)
-- Record shares, purchase price, and purchase date — multiple buys (lots) of the same stock supported
-- Current prices from the Finnhub market-data API
-- Per-position and total **gain / loss** in dollars and percent
-- Portfolio totals: cost basis, market value, today's change
-- Market-aware refresh: prices update every minute only while the market is open
-- Pre-market and after-hours prices and changes (live Finnhub trade stream, when available)
-- Optional **Trends** chart: pick stocks, choose 1M–5Y, compare % change or price (needs a free Twelve Data key)
-- Multiple local profiles (no login) — switch between portfolios
-- Edit / delete purchases, JSON backup export/import (CSV planned)
+- **Holdings** — add buys (multiple lots per stock), see price, value, weight, gain/loss $ and %, today’s change, holding period and annualized return
+- **Sells & realized gains** — FIFO matching against your oldest shares; realized gain per sale and in total
+- **Dividends & cash** — log dividends, set a cash balance; _Total return_ = unrealized + realized + dividends
+- **Activity** — every buy, sale and dividend in one list, filterable, with edit/delete
+- **Market-aware prices** — refresh every minute only while the market is open; pre-market and after-hours moves from Finnhub’s live trade stream
+- **Charts** (optional) — allocation donut (by stock or industry), portfolio performance vs the S&P 500 (time-weighted), and stock comparison
+- **Watchlist & price alerts** — follow stocks you don’t own; get a browser notification when a price crosses your target (while the site is open)
+- **CSV import/export** — import broker activity exports (Fidelity, Schwab, Robinhood-style) or your own export
+- **Profiles** — separate portfolios in one browser, no login
+- **Themes** — light, dark, black (OLED) or match your device
+- **Install as an app** — PWA: add to home screen, opens offline with your last prices
 
 ## Tech stack
 

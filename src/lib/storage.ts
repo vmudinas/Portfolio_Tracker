@@ -1,4 +1,4 @@
-import type { AppState, Lot, Profile, Settings } from '../types'
+import type { AppState, Dividend, Lot, PriceAlert, Profile, Sale, Settings } from '../types'
 import { newId } from './id'
 
 export const STORAGE_KEY = 'portfolio-tracker:v1'
@@ -6,7 +6,17 @@ export const STORAGE_KEY = 'portfolio-tracker:v1'
 export const DEFAULT_SETTINGS: Settings = { refreshSeconds: 60 }
 
 export function createProfile(name: string, lots: Lot[] = []): Profile {
-  return { id: newId(), name: name.trim() || 'My portfolio', createdAt: new Date().toISOString(), lots }
+  return {
+    id: newId(),
+    name: name.trim() || 'My portfolio',
+    createdAt: new Date().toISOString(),
+    lots,
+    sales: [],
+    dividends: [],
+    cash: 0,
+    watchlist: [],
+    alerts: [],
+  }
 }
 
 export function defaultState(): AppState {
@@ -16,7 +26,7 @@ export function defaultState(): AppState {
 
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null
 
-function parseLot(v: unknown): Lot | null {
+export function parseLot(v: unknown): Lot | null {
   if (!isObj(v)) return null
   const symbol = typeof v.symbol === 'string' ? v.symbol.trim().toUpperCase() : ''
   const shares = Number(v.shares)
@@ -34,14 +44,64 @@ function parseLot(v: unknown): Lot | null {
   }
 }
 
+const str = (v: unknown) => (typeof v === 'string' ? v : '')
+const sym = (v: unknown) => str(v).trim().toUpperCase()
+const id = (v: unknown) => str(v) || newId()
+const optFees = (v: unknown) => {
+  if (v === undefined || v === null || v === '') return {}
+  const n = Number(v)
+  return Number.isFinite(n) && n >= 0 ? { fees: n } : {}
+}
+const optNotes = (v: unknown) => (typeof v === 'string' && v ? { notes: v } : {})
+
+export function parseSale(v: unknown): Sale | null {
+  if (!isObj(v)) return null
+  const symbol = sym(v.symbol)
+  const shares = Number(v.shares)
+  const price = Number(v.price)
+  if (!symbol || !(shares > 0) || !(price >= 0)) return null
+  return { id: id(v.id), symbol, shares, price, date: str(v.date), ...optFees(v.fees), ...optNotes(v.notes) }
+}
+
+export function parseDividend(v: unknown): Dividend | null {
+  if (!isObj(v)) return null
+  const symbol = sym(v.symbol)
+  const amount = Number(v.amount)
+  if (!symbol || !(amount > 0)) return null
+  return { id: id(v.id), symbol, amount, date: str(v.date), ...optNotes(v.notes) }
+}
+
+function parseAlert(v: unknown): PriceAlert | null {
+  if (!isObj(v)) return null
+  const symbol = sym(v.symbol)
+  const price = Number(v.price)
+  if (!symbol || !(price > 0) || (v.direction !== 'above' && v.direction !== 'below')) return null
+  return {
+    id: id(v.id),
+    symbol,
+    direction: v.direction,
+    price,
+    createdAt: str(v.createdAt) || new Date().toISOString(),
+    ...(typeof v.triggeredAt === 'string' && v.triggeredAt ? { triggeredAt: v.triggeredAt } : {}),
+  }
+}
+
+const list = <T>(v: unknown, parse: (x: unknown) => T | null): T[] =>
+  Array.isArray(v) ? v.map(parse).filter((x): x is T => x !== null) : []
+
 function parseProfile(v: unknown): Profile | null {
   if (!isObj(v) || typeof v.name !== 'string') return null
-  const lots = Array.isArray(v.lots) ? v.lots.map(parseLot).filter((l): l is Lot => l !== null) : []
+  const cash = Number(v.cash)
   return {
-    id: typeof v.id === 'string' && v.id ? v.id : newId(),
+    id: id(v.id),
     name: v.name,
-    createdAt: typeof v.createdAt === 'string' ? v.createdAt : new Date().toISOString(),
-    lots,
+    createdAt: str(v.createdAt) || new Date().toISOString(),
+    lots: list(v.lots, parseLot),
+    sales: list(v.sales, parseSale),
+    dividends: list(v.dividends, parseDividend),
+    cash: Number.isFinite(cash) && cash >= 0 ? cash : 0,
+    watchlist: [...new Set(list(v.watchlist, (x) => sym(x) || null))],
+    alerts: list(v.alerts, parseAlert),
   }
 }
 

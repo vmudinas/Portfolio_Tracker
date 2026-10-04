@@ -1,33 +1,39 @@
-import { Fragment, useState } from 'react'
-import { lotCost } from '../lib/portfolio'
+import { Fragment, useState, type ReactNode } from 'react'
+import { formatHolding } from '../lib/portfolio'
 import { extendedLabel, gainColor, money, shares as fmtShares, signedMoney, signedPct } from '../lib/format'
-import type { Lot, Position } from '../types'
-import { Button, Card } from './ui'
+import type { Dividend, Position, RealizedSale } from '../types'
+import type { TxEditing, TxKind } from './TransactionForm'
+import { Button, Card, ConfirmDelete } from './ui'
 
-type SortKey = 'symbol' | 'marketValue' | 'gain' | 'gainPct' | 'dayChange'
+type SortKey = 'symbol' | 'marketValue' | 'gain' | 'dayChange' | 'holdingDays'
 
 const columns: { key: SortKey | null; label: string; align?: 'right' }[] = [
   { key: 'symbol', label: 'Symbol' },
   { key: null, label: 'Shares', align: 'right' },
   { key: null, label: 'Avg cost', align: 'right' },
   { key: null, label: 'Price', align: 'right' },
-  { key: 'marketValue', label: 'Value', align: 'right' },
+  { key: 'marketValue', label: 'Value / weight', align: 'right' },
   { key: 'gain', label: 'Gain / loss', align: 'right' },
   { key: 'dayChange', label: 'Today', align: 'right' },
+  { key: 'holdingDays', label: 'Held', align: 'right' },
 ]
 
-interface Props {
-  positions: Position[]
-  unknown: string[]
-  onEdit: (lot: Lot) => void
-  onDelete: (lot: Lot) => void
-  onAddLot: (symbol: string) => void
+export interface TxHandlers {
+  onEdit: (tx: TxEditing) => void
+  onDelete: (kind: TxKind, id: string) => void
+  onNew: (kind: TxKind, symbol: string) => void
 }
 
-export function HoldingsTable({ positions, unknown, onEdit, onDelete, onAddLot }: Props) {
+interface Props extends TxHandlers {
+  positions: Position[]
+  realized: RealizedSale[]
+  dividends: Dividend[]
+  unknown: string[]
+}
+
+export function HoldingsTable({ positions, realized, dividends, unknown, ...handlers }: Props) {
   const [sort, setSort] = useState<{ key: SortKey; dir: 1 | -1 }>({ key: 'marketValue', dir: -1 })
   const [open, setOpen] = useState<Record<string, boolean>>({})
-  const [confirming, setConfirming] = useState<string | null>(null)
 
   const sorted = [...positions].sort((a, b) => {
     if (sort.key === 'symbol') return a.symbol.localeCompare(b.symbol) * sort.dir
@@ -36,11 +42,17 @@ export function HoldingsTable({ positions, unknown, onEdit, onDelete, onAddLot }
     return (av - bv) * sort.dir
   })
 
-  const lotProps = { confirming, setConfirming, onEdit, onDelete, onAddLot }
   const toggle = (symbol: string) => setOpen((o) => ({ ...o, [symbol]: !o[symbol] }))
-
   const toggleSort = (key: SortKey) =>
     setSort((s) => (s.key === key ? { key, dir: s.dir === 1 ? -1 : 1 } : { key, dir: key === 'symbol' ? 1 : -1 }))
+  const detail = (p: Position) => (
+    <PositionDetail
+      position={p}
+      sales={realized.filter((r) => r.sale.symbol === p.symbol)}
+      dividends={dividends.filter((d) => d.symbol === p.symbol)}
+      {...handlers}
+    />
+  )
 
   return (
     <>
@@ -58,9 +70,20 @@ export function HoldingsTable({ positions, unknown, onEdit, onDelete, onAddLot }
                   onClick={() => toggle(p.symbol)}
                 >
                   <div className="min-w-0">
-                    <p className="font-semibold">{p.symbol}</p>
+                    <p className="font-semibold">
+                      {p.symbol}
+                      {p.weight !== null && (
+                        <span className="ml-2 text-xs font-normal text-slate-500">{p.weight.toFixed(1)}%</span>
+                      )}
+                    </p>
                     <p className="mt-0.5 text-xs text-slate-500 tabular-nums">
                       {fmtShares(p.shares)} sh · avg {money(p.avgCost)} · now {money(p.price)}
+                    </p>
+                    <p className="text-xs text-slate-500 tabular-nums">
+                      Held {formatHolding(p.holdingDays)}
+                      {p.annualizedPct !== null && (
+                        <span className={gainColor(p.annualizedPct)}> · {signedPct(p.annualizedPct)}/yr</span>
+                      )}
                     </p>
                     {unknown.includes(p.symbol) && <p className="text-xs text-amber-600">Symbol not found</p>}
                   </div>
@@ -74,8 +97,8 @@ export function HoldingsTable({ positions, unknown, onEdit, onDelete, onAddLot }
                   </div>
                 </button>
                 {isOpen && (
-                  <div className="border-t border-slate-100 bg-slate-50/70 px-2 py-3 dark:border-slate-800 dark:bg-slate-950/40">
-                    <LotList position={p} {...lotProps} />
+                  <div className="border-t border-slate-100 bg-slate-50/70 px-3 py-3 dark:border-slate-800 dark:bg-slate-950/40">
+                    {detail(p)}
                   </div>
                 )}
               </Card>
@@ -87,7 +110,7 @@ export function HoldingsTable({ positions, unknown, onEdit, onDelete, onAddLot }
       {/* Tablets and up: sortable table */}
       <Card className="hidden overflow-hidden sm:block">
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[720px] text-sm">
+          <table className="w-full min-w-[860px] text-sm">
             <thead className="bg-slate-50 text-xs text-slate-500 uppercase dark:bg-slate-800/50">
               <tr>
                 {columns.map((c) => (
@@ -116,7 +139,6 @@ export function HoldingsTable({ positions, unknown, onEdit, onDelete, onAddLot }
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
               {sorted.map((p) => {
                 const isOpen = !!open[p.symbol]
-                const isUnknown = unknown.includes(p.symbol)
                 return (
                   <Fragment key={p.symbol}>
                     <tr
@@ -127,13 +149,15 @@ export function HoldingsTable({ positions, unknown, onEdit, onDelete, onAddLot }
                         <button
                           type="button"
                           aria-expanded={isOpen}
-                          aria-label={`${isOpen ? 'Hide' : 'Show'} purchases of ${p.symbol}`}
+                          aria-label={`${isOpen ? 'Hide' : 'Show'} details for ${p.symbol}`}
                           className="flex items-center gap-2 font-semibold"
                         >
                           <span className="w-3 text-xs text-slate-400">{isOpen ? '▼' : '▶'}</span>
                           {p.symbol}
                         </button>
-                        {isUnknown && <span className="ml-6 text-xs text-amber-600">Symbol not found</span>}
+                        {unknown.includes(p.symbol) && (
+                          <span className="ml-6 text-xs text-amber-600">Symbol not found</span>
+                        )}
                         {p.lots.length > 1 && (
                           <span className="ml-6 block text-xs text-slate-500">{p.lots.length} purchases</span>
                         )}
@@ -144,7 +168,12 @@ export function HoldingsTable({ positions, unknown, onEdit, onDelete, onAddLot }
                         <div>{money(p.price)}</div>
                         {p.extended && <ExtendedLine move={p.extended} />}
                       </td>
-                      <td className="px-4 py-3 text-right font-medium tabular-nums">{money(p.marketValue)}</td>
+                      <td className="px-4 py-3 text-right tabular-nums">
+                        <div className="font-medium">{money(p.marketValue)}</div>
+                        <div className="text-xs text-slate-500">
+                          {p.weight === null ? '—' : `${p.weight.toFixed(1)}%`}
+                        </div>
+                      </td>
                       <td className={`px-4 py-3 text-right tabular-nums ${gainColor(p.gain)}`}>
                         <div className="font-medium">{signedMoney(p.gain)}</div>
                         <div className="text-xs">{signedPct(p.gainPct)}</div>
@@ -158,11 +187,22 @@ export function HoldingsTable({ positions, unknown, onEdit, onDelete, onAddLot }
                           </div>
                         )}
                       </td>
+                      <td className="px-4 py-3 text-right tabular-nums">
+                        <div>{formatHolding(p.holdingDays)}</div>
+                        <div
+                          className={`text-xs ${p.annualizedPct === null ? 'text-slate-400' : gainColor(p.annualizedPct)}`}
+                          title={
+                            p.annualizedPct === null ? 'Annualized return shows after a year' : 'Annualized return'
+                          }
+                        >
+                          {p.annualizedPct === null ? '—' : `${signedPct(p.annualizedPct)}/yr`}
+                        </div>
+                      </td>
                     </tr>
                     {isOpen && (
                       <tr className="bg-slate-50/70 dark:bg-slate-950/40">
-                        <td colSpan={columns.length} className="px-4 py-3">
-                          <LotList position={p} {...lotProps} />
+                        <td colSpan={columns.length} className="px-6 py-3">
+                          {detail(p)}
                         </td>
                       </tr>
                     )}
@@ -177,77 +217,142 @@ export function HoldingsTable({ positions, unknown, onEdit, onDelete, onAddLot }
   )
 }
 
-interface LotListProps {
+interface DetailProps extends TxHandlers {
   position: Position
-  confirming: string | null
-  setConfirming: (id: string | null) => void
-  onEdit: (lot: Lot) => void
-  onDelete: (lot: Lot) => void
-  onAddLot: (symbol: string) => void
+  sales: RealizedSale[]
+  dividends: Dividend[]
 }
 
-function LotList({ position, confirming, setConfirming, onEdit, onDelete, onAddLot }: LotListProps) {
+function PositionDetail({ position: p, sales, dividends, onEdit, onDelete, onNew }: DetailProps) {
   return (
-    <>
-      <ul className="space-y-2">
-        {position.lots.map((lot) => {
-          const cost = lotCost(lot)
-          const value = position.price === null ? null : lot.shares * position.price
-          const gain = value === null ? null : value - cost
+    <div className="space-y-3 text-sm">
+      <Section title="Purchases still held">
+        {p.lots.map((lot) => {
+          const cost = lot.remaining * lot.costPerShare
+          const gain = p.price === null ? null : lot.remaining * p.price - cost
           return (
-            <li key={lot.id} className="flex flex-wrap items-center gap-x-6 gap-y-1 pl-6 text-sm">
-              <span className="w-24 text-slate-500">{lot.buyDate || 'No date'}</span>
-              <span className="tabular-nums">
-                {fmtShares(lot.shares)} @ {money(lot.buyPrice)}
-                {lot.fees ? <span className="text-slate-500"> + {money(lot.fees)} fees</span> : null}
-              </span>
-              <span className={`tabular-nums ${gainColor(gain)}`}>
-                {signedMoney(gain)} ({signedPct(gain === null || cost === 0 ? null : (gain / cost) * 100)})
-              </span>
-              {lot.notes && <span className="text-slate-500 italic">{lot.notes}</span>}
-              <span className="ml-auto flex gap-1">
-                <Button
-                  variant="ghost"
-                  className="px-2 py-1"
-                  onClick={() => onEdit(lot)}
-                  aria-label={`Edit ${lot.symbol} purchase from ${lot.buyDate}`}
-                >
-                  Edit
-                </Button>
-                {confirming === lot.id ? (
-                  <Button
-                    variant="danger"
-                    className="px-2 py-1"
-                    onClick={() => {
-                      onDelete(lot)
-                      setConfirming(null)
-                    }}
-                  >
-                    Confirm delete
-                  </Button>
-                ) : (
-                  <Button
-                    variant="ghost"
-                    className="px-2 py-1 text-rose-600"
-                    onClick={() => setConfirming(lot.id)}
-                    aria-label={`Delete ${lot.symbol} purchase from ${lot.buyDate}`}
-                  >
-                    Delete
-                  </Button>
-                )}
-              </span>
-            </li>
+            <Row
+              key={lot.id}
+              date={lot.buyDate}
+              main={
+                <>
+                  {fmtShares(lot.remaining)}
+                  {lot.remaining < lot.shares && (
+                    <span className="text-slate-500"> of {fmtShares(lot.shares)}</span>
+                  )} @ {money(lot.buyPrice)}
+                  {lot.fees ? <span className="text-slate-500"> + {money(lot.fees)} fees</span> : null}
+                </>
+              }
+              value={
+                <span className={gainColor(gain)}>
+                  {signedMoney(gain)} ({signedPct(gain === null || cost === 0 ? null : (gain / cost) * 100)})
+                </span>
+              }
+              notes={lot.notes}
+              onEdit={() => onEdit({ kind: 'buy', lot })}
+              onDelete={() => onDelete('buy', lot.id)}
+              what={`${lot.symbol} purchase from ${lot.buyDate}`}
+            />
           )
         })}
-      </ul>
-      <Button
-        variant="ghost"
-        className="mt-2 ml-4 px-2 py-1 text-teal-700 dark:text-teal-400"
-        onClick={() => onAddLot(position.symbol)}
-      >
-        + Add another {position.symbol} purchase
-      </Button>
-    </>
+      </Section>
+      {sales.length > 0 && (
+        <Section title="Sales">
+          {sales.map((r) => (
+            <Row
+              key={r.sale.id}
+              date={r.sale.date}
+              main={
+                <>
+                  Sold {fmtShares(r.sale.shares)} @ {money(r.sale.price)}
+                  {r.unmatched > 0 && (
+                    <span className="text-amber-600"> · {fmtShares(r.unmatched)} without a matching buy</span>
+                  )}
+                </>
+              }
+              value={<span className={gainColor(r.gain)}>Realized {signedMoney(r.gain)}</span>}
+              notes={r.sale.notes}
+              onEdit={() => onEdit({ kind: 'sell', sale: r.sale })}
+              onDelete={() => onDelete('sell', r.sale.id)}
+              what={`${r.sale.symbol} sale from ${r.sale.date}`}
+            />
+          ))}
+        </Section>
+      )}
+      {dividends.length > 0 && (
+        <Section title="Dividends">
+          {dividends.map((d) => (
+            <Row
+              key={d.id}
+              date={d.date}
+              main="Dividend"
+              value={<span className={gainColor(d.amount)}>{signedMoney(d.amount)}</span>}
+              notes={d.notes}
+              onEdit={() => onEdit({ kind: 'dividend', dividend: d })}
+              onDelete={() => onDelete('dividend', d.id)}
+              what={`${d.symbol} dividend from ${d.date}`}
+            />
+          ))}
+        </Section>
+      )}
+      <div className="flex flex-wrap gap-1 pt-1">
+        <Button
+          variant="ghost"
+          className="px-2 py-1 text-teal-700 dark:text-teal-400"
+          onClick={() => onNew('buy', p.symbol)}
+        >
+          + Buy more
+        </Button>
+        <Button
+          variant="ghost"
+          className="px-2 py-1 text-teal-700 dark:text-teal-400"
+          onClick={() => onNew('sell', p.symbol)}
+        >
+          Sell
+        </Button>
+        <Button
+          variant="ghost"
+          className="px-2 py-1 text-teal-700 dark:text-teal-400"
+          onClick={() => onNew('dividend', p.symbol)}
+        >
+          + Dividend
+        </Button>
+      </div>
+    </div>
+  )
+}
+
+function Section({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <div>
+      <p className="mb-1 text-xs font-medium tracking-wide text-slate-500 uppercase">{title}</p>
+      <ul className="space-y-1">{children}</ul>
+    </div>
+  )
+}
+
+function Row(props: {
+  date: string
+  main: ReactNode
+  value: ReactNode
+  notes?: string
+  onEdit: () => void
+  onDelete: () => void
+  what: string
+}) {
+  return (
+    <li className="flex flex-wrap items-center gap-x-5 gap-y-1">
+      <span className="w-24 text-slate-500 tabular-nums">{props.date || 'No date'}</span>
+      <span className="tabular-nums">{props.main}</span>
+      <span className="tabular-nums">{props.value}</span>
+      {props.notes && <span className="text-slate-500 italic">{props.notes}</span>}
+      <span className="ml-auto flex gap-1">
+        <Button variant="ghost" className="px-2 py-1" onClick={props.onEdit} aria-label={`Edit ${props.what}`}>
+          Edit
+        </Button>
+        <ConfirmDelete onConfirm={props.onDelete} label={`Delete ${props.what}`} />
+      </span>
+    </li>
   )
 }
 

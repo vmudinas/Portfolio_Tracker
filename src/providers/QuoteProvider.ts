@@ -26,10 +26,17 @@ export interface QuoteProvider {
   /** Resolves to null when the symbol is unknown. */
   getQuote(symbol: string): Promise<Quote | null>
   search(query: string): Promise<SymbolMatch[]>
+  /** Company name and industry; null for funds/unknown. */
+  getProfile?(symbol: string): Promise<CompanyProfile | null>
   /** Current exchange session; optional so simple providers can skip it. */
   getMarketStatus?(): Promise<MarketStatus>
   /** Live trades (incl. pre/post market when the feed has them). Returns an unsubscribe function. */
   streamTrades?(symbols: string[], onTrade: (trade: Trade) => void): () => void
+}
+
+export interface CompanyProfile {
+  name: string
+  industry: string
 }
 
 export interface Trade {

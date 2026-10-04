@@ -24,12 +24,72 @@ export interface Quote {
   updatedAt: string
 }
 
+/** A sale of shares. Matched against purchases first-in, first-out. */
+export interface Sale {
+  id: string
+  symbol: string
+  shares: number
+  /** Price received per share. */
+  price: number
+  /** ISO date (YYYY-MM-DD). */
+  date: string
+  fees?: number
+  notes?: string
+}
+
+/** Cash dividend received (total amount, not per share). */
+export interface Dividend {
+  id: string
+  symbol: string
+  amount: number
+  date: string
+  notes?: string
+}
+
+export interface PriceAlert {
+  id: string
+  symbol: string
+  direction: 'above' | 'below'
+  price: number
+  createdAt: string
+  /** Set when the alert fired; cleared to re-arm. */
+  triggeredAt?: string
+}
+
+/** Purchases, sales and dividends — everything the gain/loss maths needs. */
+export interface Book {
+  lots: Lot[]
+  sales: Sale[]
+  dividends: Dividend[]
+}
+
 /** A local profile (no login) — lets several people/portfolios share one browser. */
-export interface Profile {
+export interface Profile extends Book {
   id: string
   name: string
   createdAt: string
-  lots: Lot[]
+  /** Uninvested cash, entered by hand. */
+  cash: number
+  watchlist: string[]
+  alerts: PriceAlert[]
+}
+
+/** A purchase with the shares still held after FIFO-matching sales. */
+export interface OpenLot extends Lot {
+  remaining: number
+  /** (shares × price + fees) / shares */
+  costPerShare: number
+}
+
+export interface RealizedSale {
+  sale: Sale
+  /** Cost of the shares matched to this sale. */
+  cost: number
+  /** Net proceeds of the matched shares (after fees). */
+  proceeds: number
+  gain: number
+  /** Shares sold that had no matching purchase (data-entry problem). */
+  unmatched: number
 }
 
 export interface Settings {
@@ -62,7 +122,18 @@ export interface Position {
   dayChange: number | null
   /** Pre-market / after-hours price vs the last regular-session price, when available. */
   extended: ExtendedMove | null
-  lots: Lot[]
+  /** Realized gain from sales of this symbol. */
+  realizedGain: number
+  dividends: number
+  /** Share of total value (stocks + cash), 0–100. */
+  weight: number | null
+  /** Earliest purchase date still held. */
+  heldSince: string | null
+  /** Cost-weighted average holding period of the open shares. */
+  holdingDays: number | null
+  /** Compound annual return; only for positions held a year or more. */
+  annualizedPct: number | null
+  lots: OpenLot[]
 }
 
 export type MarketSession = 'pre' | 'regular' | 'post' | 'closed'
@@ -94,13 +165,22 @@ export interface ExtendedMove {
 
 export interface PortfolioSummary {
   costBasis: number
+  /** Value of stocks only. */
   marketValue: number
+  cash: number
+  /** Stocks + cash. */
+  totalValue: number
+  /** Unrealized gain on open positions. */
   gain: number
   gainPct: number
   dayChange: number
   /** Sum of pre-market / after-hours moves for positions that have one. */
   extendedChange: number | null
   extendedSession: 'pre' | 'post' | null
+  realizedGain: number
+  dividends: number
+  /** Unrealized + realized + dividends. */
+  totalReturn: number
   /** Symbols with no quote yet; excluded from value/gain totals. */
   missingQuotes: string[]
 }

@@ -1,6 +1,9 @@
 @import 'tailwindcss';
 
-/* Chart series colours — validated categorical palette (fixed order; colour follows the stock, not its rank). */
+/* Dark mode follows a class on <html> (set from the theme picker; "Auto" follows the OS). */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* Chart colours — validated categorical palette (fixed order; colour follows the stock, not its rank). */
 :root {
   --series-1: #2a78d6;
   --series-2: #eb6834;
@@ -13,20 +16,35 @@
   --chart-grid: #e2e8f0;
   --chart-axis: #64748b;
   --chart-surface: #ffffff;
+  /* Neutrals for benchmark / "Other" / cash — never a series hue. */
+  --chart-neutral: #475569;
+  --chart-neutral-2: #cbd5e1;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --series-1: #3987e5;
-    --series-2: #d95926;
-    --series-3: #199e70;
-    --series-4: #c98500;
-    --series-5: #d55181;
-    --series-6: #008300;
-    --series-7: #9085e9;
-    --series-8: #e66767;
-    --chart-grid: #1e293b;
-    --chart-axis: #94a3b8;
-    --chart-surface: #0f172a;
-  }
+.dark {
+  color-scheme: dark;
+  --series-1: #3987e5;
+  --series-2: #d95926;
+  --series-3: #199e70;
+  --series-4: #c98500;
+  --series-5: #d55181;
+  --series-6: #008300;
+  --series-7: #9085e9;
+  --series-8: #e66767;
+  --chart-grid: #1e293b;
+  --chart-axis: #94a3b8;
+  --chart-surface: #0f172a;
+  --chart-neutral: #cbd5e1;
+  --chart-neutral-2: #475569;
+}
+
+/* Black (OLED) theme: the dark theme with true-black surfaces. Tailwind v4 colours are CSS variables, so remap the darkest slates. */
+.black {
+  --color-slate-950: #000000;
+  --color-slate-900: #0a0a0b;
+  --color-slate-800: #1a1a1d;
+  --color-slate-700: #2a2a2e;
+  --chart-surface: #0a0a0b;
+  --chart-grid: #1a1a1d;
+  --chart-neutral-2: #3f3f46;
 }
