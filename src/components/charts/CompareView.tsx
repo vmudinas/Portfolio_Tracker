@@ -34,8 +34,22 @@ function readPrefs(): Prefs {
 }
 
 /** Compare selected holdings (and optionally the S&P 500) as % change or price. */
-export default function CompareView({ symbols, provider }: { symbols: string[]; provider: HistoryProvider }) {
-  const [prefs, setPrefs] = useState<Prefs>(readPrefs)
+export default function CompareView({
+  symbols,
+  provider,
+  preselect,
+}: {
+  symbols: string[]
+  provider: HistoryProvider
+  /** Start with exactly these stocks selected (from "Compare selected"). */
+  preselect?: string[]
+}) {
+  const [prefs, setPrefs] = useState<Prefs>(() => {
+    const p = readPrefs()
+    return preselect?.length
+      ? { ...p, mode: 'percent', slots: assignSlots({}, preselect.slice(0, MAX_SERIES), MAX_SERIES) }
+      : p
+  })
   const slots = useMemo(() => {
     const saved = prefs.slots ?? assignSlots({}, symbols.slice(0, 3), MAX_SERIES)
     const kept = Object.keys(saved).filter((s) => symbols.includes(s))

@@ -161,6 +161,14 @@ No secrets are needed — there is no server and no committed API key.
 - **Themes**: class-based dark mode (`.dark`), black theme remaps Tailwind’s darkest slates; applied before first paint by an inline script.
 - **PWA**: `manifest.webmanifest`, icons, `sw.js` (network-first pages, cache-first hashed assets; APIs never cached).
 
+## 7c. Selection totals, returns & Sharpe (added 2026-10-04)
+
+- **Selection**: checkboxes on holdings; a bar shows combined value (and % of portfolio), cost, unrealized, today (+ after-hours), realized, dividends. “Compare chart” opens Compare with those stocks; “Returns & Sharpe” opens the stats.
+- **Data**: Twelve Data monthly closes (`interval=1month`, up to 240 months), cached 6 h.
+- **Portfolio / selection monthly returns**: Modified Dietz per calendar month (flows weighted by days remaining), month-end value = shares held × month-end close (carried forward), current month uses live regular-session prices. Cash and dividends excluded.
+- **Holding returns**: month-over-month price returns; ITD = latest price ÷ your first purchase price − 1. **Benchmark** (SPY) ITD aligned to the portfolio’s first month.
+- **Stats**: YTD (compounded months this year), 1Y (last 12 full months), ITD and annualized ITD (≥ 1 year), Sharpe = mean excess monthly return ÷ sample stdev × √12 over the last 12/24/36/60 full months (shown only when available). Risk-free rate configurable in Settings (default 4.0% ≈ 3-month T-bill, Fed H.15, 2026-10-01).
+
 ## 8. Testing
 
 | Level          | Tool                    | What                                                             |

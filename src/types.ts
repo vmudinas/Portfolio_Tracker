@@ -99,6 +99,8 @@ export interface Settings {
   twelveDataApiKey?: string
   refreshSeconds: number
   showTrends?: boolean
+  /** Annual risk-free rate in % used for Sharpe ratios (e.g. 3-month T-bill). */
+  riskFreeRate?: number
 }
 
 /** Everything persisted to localStorage. */

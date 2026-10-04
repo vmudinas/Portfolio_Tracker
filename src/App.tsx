@@ -6,6 +6,7 @@ import { EmptyState } from './components/EmptyState'
 import { HoldingsTable, type TxHandlers } from './components/HoldingsTable'
 import { MarketBadge } from './components/MarketBadge'
 import { ProfileSwitcher } from './components/ProfileSwitcher'
+import { SelectionBar } from './components/SelectionBar'
 import { SettingsDialog } from './components/SettingsDialog'
 import { SummaryCards } from './components/SummaryCards'
 import { ThemeToggle } from './components/ThemeToggle'
@@ -20,7 +21,7 @@ import { useQuotes } from './hooks/useQuotes'
 import { useTheme } from './hooks/useTheme'
 import { money } from './lib/format'
 import { analyze, visibleExtended } from './lib/portfolio'
-import { defaultState, parseDividend, parseLot, parseSale } from './lib/storage'
+import { DEFAULT_RISK_FREE, defaultState, parseDividend, parseLot, parseSale } from './lib/storage'
 import { createFinnhubProvider } from './providers/finnhub'
 import type { HistoryProvider } from './providers/HistoryProvider'
 import type { QuoteProvider } from './providers/QuoteProvider'
@@ -31,6 +32,7 @@ import type { Dividend, Lot, Sale } from './types'
 
 // Charts (and the charting library) load only when opened, keeping the first page load small.
 const ChartsPanel = lazy(() => import('./components/charts/ChartsPanel'))
+type ChartRequest = { id: number; view: 'compare' | 'returns'; symbols?: string[] }
 
 type Tab = 'holdings' | 'activity' | 'watchlist'
 
@@ -47,6 +49,8 @@ function App({ providerFactory = createFinnhubProvider, historyFactory = createT
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [cashOpen, setCashOpen] = useState(false)
   const [backupOpen, setBackupOpen] = useState(false)
+  const [selectedRaw, setSelected] = useState<string[]>([])
+  const [chartRequest, setChartRequest] = useState<ChartRequest | undefined>()
   const [tab, setTab] = useState<Tab>('holdings')
   const [notice, setNotice] = useState<string | null>(null)
 
@@ -86,6 +90,13 @@ function App({ providerFactory = createFinnhubProvider, historyFactory = createT
     () => analyze(book, quotes, extended, { cash: profile.cash }),
     [book, quotes, extended, profile.cash],
   )
+  // Only keep selections that are still open positions in this profile.
+  const selected = selectedRaw.filter((s) => positions.some((p) => p.symbol === s))
+  const openCharts = (view: ChartRequest['view'], symbols?: string[]) => {
+    setChartRequest({ id: Date.now(), view, symbols })
+    if (!showCharts) dispatch({ type: 'settings/update', settings: { showTrends: true } })
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
   const bySize = useMemo(
     () => [...positions].sort((a, b) => (b.marketValue ?? 0) - (a.marketValue ?? 0)).map((p) => p.symbol),
     [positions],
@@ -96,6 +107,12 @@ function App({ providerFactory = createFinnhubProvider, historyFactory = createT
     for (const [s, q] of Object.entries(quotes)) if (q) out[s] = extended[s]?.price ?? q.price
     return out
   }, [quotes, extended])
+  // Regular-session prices (no after-hours) for return statistics, so they line up with official closes.
+  const regularPrices = useMemo(() => {
+    const out: Record<string, number> = {}
+    for (const [s, q] of Object.entries(quotes)) if (q) out[s] = q.price
+    return out
+  }, [quotes])
   const onTrigger = useCallback((id: string, at: string) => dispatch({ type: 'alert/trigger', id, at }), [dispatch])
   const { fired, dismiss } = useAlerts(profile.alerts, latestPrices, onTrigger)
 
@@ -269,6 +286,10 @@ function App({ providerFactory = createFinnhubProvider, historyFactory = createT
                   symbols={bySize}
                   historyProvider={historyProvider}
                   quoteProvider={provider}
+                  selected={selected}
+                  latestPrices={regularPrices}
+                  riskFree={state.settings.riskFreeRate ?? DEFAULT_RISK_FREE}
+                  request={chartRequest}
                   onOpenSettings={() => setSettingsOpen(true)}
                 />
               </Suspense>
@@ -288,9 +309,25 @@ function App({ providerFactory = createFinnhubProvider, historyFactory = createT
                 { id: 'watchlist', label: `Watchlist & alerts${watchCount ? ` (${watchCount})` : ''}` },
               ]}
             />
+            {tab === 'holdings' && selected.length > 0 && (
+              <SelectionBar
+                positions={positions.filter((p) => selected.includes(p.symbol))}
+                realized={realized}
+                dividends={profile.dividends}
+                totalValue={summary.totalValue}
+                onCompare={() => openCharts('compare', selected)}
+                onReturns={() => openCharts('returns')}
+                onClear={() => setSelected([])}
+              />
+            )}
             {tab === 'holdings' &&
               (positions.length ? (
                 <HoldingsTable
+                  selected={selected}
+                  onToggleSelect={(sym) =>
+                    setSelected((cur) => (cur.includes(sym) ? cur.filter((x) => x !== sym) : [...cur, sym]))
+                  }
+                  onSelectAll={(all) => setSelected(all ? positions.map((p) => p.symbol) : [])}
                   positions={positions}
                   realized={realized}
                   dividends={profile.dividends}

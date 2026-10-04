@@ -8,8 +8,10 @@ import AllocationView from './AllocationView'
 import { NeedsHistoryKey } from './common'
 import CompareView from './CompareView'
 import PerformanceView from './PerformanceView'
+import ReturnsView from './ReturnsView'
 
-type View = 'allocation' | 'performance' | 'compare'
+export type ChartView = 'allocation' | 'performance' | 'returns' | 'compare'
+type View = ChartView
 const VIEW_KEY = 'portfolio-tracker:chart-view'
 
 interface Props {
@@ -20,6 +22,12 @@ interface Props {
   symbols: string[]
   historyProvider: HistoryProvider | null
   quoteProvider: QuoteProvider | null
+  /** Holdings ticked in the table. */
+  selected: string[]
+  latestPrices: Record<string, number | undefined>
+  riskFree: number
+  /** Ask the panel to switch view (and preselect stocks for Compare). `id` changes per request. */
+  request?: { id: number; view: View; symbols?: string[] }
   onOpenSettings: () => void
 }
 
@@ -28,11 +36,17 @@ export default function ChartsPanel(props: Props) {
   const [view, setView] = useState<View>(() => {
     try {
       const v = localStorage.getItem(VIEW_KEY)
-      return v === 'performance' || v === 'compare' ? v : 'allocation'
+      return v === 'performance' || v === 'compare' || v === 'returns' ? v : 'allocation'
     } catch {
       return 'allocation'
     }
   })
+  // Handle a new request from outside (e.g. "Compare selected") during render — no effect needed.
+  const [handled, setHandled] = useState<number | null>(null)
+  if (props.request && props.request.id !== handled) {
+    setHandled(props.request.id)
+    setView(props.request.view)
+  }
   const profiles = useProfiles(view === 'allocation' ? props.symbols : [], props.quoteProvider)
 
   const choose = (v: View) => {
@@ -53,6 +67,7 @@ export default function ChartsPanel(props: Props) {
         tabs={[
           { id: 'allocation', label: 'Allocation' },
           { id: 'performance', label: 'Performance' },
+          { id: 'returns', label: 'Returns & Sharpe' },
           { id: 'compare', label: 'Compare stocks' },
         ]}
       />
@@ -62,8 +77,23 @@ export default function ChartsPanel(props: Props) {
         {view === 'performance' && props.historyProvider && (
           <PerformanceView book={props.book} provider={props.historyProvider} />
         )}
+        {view === 'returns' && props.historyProvider && (
+          <ReturnsView
+            book={props.book}
+            held={props.symbols}
+            selected={props.selected}
+            latestPrices={props.latestPrices}
+            riskFree={props.riskFree}
+            provider={props.historyProvider}
+          />
+        )}
         {view === 'compare' && props.historyProvider && (
-          <CompareView symbols={props.symbols} provider={props.historyProvider} />
+          <CompareView
+            key={props.request?.symbols ? props.request.id : 'compare'}
+            symbols={props.symbols}
+            provider={props.historyProvider}
+            preselect={props.request?.view === 'compare' ? props.request.symbols : undefined}
+          />
         )}
       </div>
     </Card>
