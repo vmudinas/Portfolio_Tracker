@@ -93,6 +93,15 @@ export function createFinnhubProvider(apiKey: string, opts: Options = {}): Quote
         .map<SymbolMatch>((r) => ({ symbol: r.symbol, description: r.description, type: r.type }))
     },
 
+    async getProfile(symbol) {
+      const p = await get<{ name?: string; finnhubIndustry?: string }>('/stock/profile2', {
+        symbol: symbol.toUpperCase(),
+      })
+      // ETFs and funds come back empty.
+      if (!p || !p.name) return null
+      return { name: p.name, industry: p.finnhubIndustry || 'Other' }
+    },
+
     async getMarketStatus() {
       const m = await get<FinnhubMarketStatus>('/stock/market-status', { exchange: 'US' })
       const status: MarketStatus = {

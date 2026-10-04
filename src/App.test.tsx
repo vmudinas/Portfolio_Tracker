@@ -113,7 +113,7 @@ describe('App', () => {
     expect(screen.getAllByText('After hours').length).toBeGreaterThan(0) // market badge
   })
 
-  it('shows the optional trends chart', async () => {
+  it('shows the optional charts', async () => {
     withKey()
     const user = userEvent.setup()
     const history = {
@@ -128,8 +128,9 @@ describe('App', () => {
     }
     const { unmount } = render(<App providerFactory={factory} />)
     await addLot(user, 'AAPL', '1', '100')
-    await user.click(screen.getByRole('button', { name: /chart/i }))
+    await user.click(screen.getByRole('button', { name: /charts/i }))
     // the chart module is lazy-loaded, so allow time for the import
+    await user.click(await screen.findByRole('tab', { name: 'Compare stocks' }, { timeout: 5000 }))
     expect(await screen.findByRole('button', { name: 'Add Twelve Data key' }, { timeout: 5000 })).toBeInTheDocument()
     unmount()
 
@@ -137,8 +138,84 @@ describe('App', () => {
     s.settings.twelveDataApiKey = 'td'
     localStorage.setItem('portfolio-tracker:v1', JSON.stringify(s))
     render(<App providerFactory={factory} historyFactory={() => history} />)
+    // the chart view choice is remembered
     const picker = await screen.findByRole('group', { name: 'Stocks to chart' }, { timeout: 5000 })
     await waitFor(() => expect(within(picker).getByRole('button', { name: /AAPL/ })).toHaveTextContent('+25.00%'))
     await screen.findByText(/prices updated/i)
+  })
+
+  it('records a sale with realized gain, dividends and cash', async () => {
+    withKey()
+    const user = userEvent.setup()
+    render(<App providerFactory={factory} />)
+    await addLot(user, 'AAPL', '10', '150')
+
+    await user.click(screen.getByRole('button', { name: '+ Add transaction' }))
+    let dialog = screen.getByRole('dialog')
+    await user.click(within(dialog).getByRole('button', { name: 'Sell' }))
+    await user.type(within(dialog).getByLabelText('Symbol'), 'AAPL')
+    await user.type(within(dialog).getByLabelText(/^Shares/), '20')
+    await user.type(within(dialog).getByLabelText(/sale price/i), '180')
+    await user.click(within(dialog).getByRole('button', { name: 'Record sale' }))
+    expect(within(dialog).getByText('You held 10 shares on that date')).toBeInTheDocument()
+    await user.clear(within(dialog).getByLabelText(/^Shares/))
+    await user.type(within(dialog).getByLabelText(/^Shares/), '4')
+    await user.click(within(dialog).getByRole('button', { name: 'Record sale' }))
+
+    await user.click(screen.getByRole('button', { name: '+ Add transaction' }))
+    dialog = screen.getByRole('dialog')
+    await user.click(within(dialog).getByRole('button', { name: 'Dividend' }))
+    await user.type(within(dialog).getByLabelText('Symbol'), 'AAPL')
+    await user.type(within(dialog).getByLabelText(/amount received/i), '5')
+    await user.click(within(dialog).getByRole('button', { name: 'Record dividend' }))
+
+    await user.click(screen.getByRole('button', { name: /cash \$0\.00, edit/i }))
+    await user.type(screen.getByLabelText(/uninvested cash/i), '800')
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Save' }))
+
+    const summary = screen.getByLabelText('Portfolio summary')
+    // 6 shares × $200 + $800 cash
+    expect(summary).toHaveTextContent('$2,000.00')
+    // realized (180−150)×4 = 120; dividends 5; unrealized (200−150)×6 = 300
+    expect(summary).toHaveTextContent('Realized +$120.00')
+    expect(summary).toHaveTextContent('Dividends +$5.00')
+    expect(summary).toHaveTextContent('+$425.00')
+
+    await user.click(screen.getByRole('tab', { name: 'Activity' }))
+    const list = screen.getByRole('list', { name: 'Transactions' })
+    expect(within(list).getAllByRole('listitem')).toHaveLength(3)
+    expect(within(list).getByText('Realized +$120.00')).toBeInTheDocument()
+  })
+
+  it('watchlist alerts fire when the price crosses the target', async () => {
+    withKey()
+    const user = userEvent.setup()
+    render(<App providerFactory={factory} />)
+    await addLot(user, 'AAPL', '1', '100')
+    await user.click(screen.getByRole('tab', { name: /watchlist/i }))
+    await user.type(screen.getByLabelText('Symbol to watch'), 'msft')
+    await user.click(screen.getByRole('button', { name: 'Add' }))
+    const table = screen.getByRole('table')
+    expect(within(table).getByText('MSFT')).toBeInTheDocument()
+    await waitFor(() => expect(within(table).getByText('$300.00')).toBeInTheDocument())
+
+    await user.type(screen.getByLabelText('Alert symbol'), 'MSFT')
+    await user.type(screen.getByLabelText('Target price'), '250')
+    await user.click(screen.getByRole('button', { name: 'Add alert' }))
+    // MSFT is $300, already above $250
+    expect(await screen.findByText(/MSFT rises above \$250\.00/, { selector: 'strong' })).toBeInTheDocument()
+    expect(
+      within(screen.getByRole('list', { name: 'Alerts' })).getByRole('button', { name: 'Re-arm' }),
+    ).toBeInTheDocument()
+  })
+
+  it('switches between light, dark and black themes', async () => {
+    const user = userEvent.setup()
+    render(<App providerFactory={factory} />)
+    await user.click(screen.getByRole('radio', { name: 'Black' }))
+    expect(document.documentElement).toHaveClass('dark', 'black')
+    await user.click(screen.getByRole('radio', { name: 'Light' }))
+    expect(document.documentElement).not.toHaveClass('dark')
+    expect(localStorage.getItem('portfolio-tracker:theme')).toBe('light')
   })
 })

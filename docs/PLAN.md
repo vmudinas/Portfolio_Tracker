@@ -148,6 +148,19 @@ No secrets are needed — there is no server and no committed API key.
 - **Pre-market / after-hours**: Finnhub WebSocket trades (free, up to 50 symbols, separate from the REST limit) during pre/post sessions. Latest trade per symbol is cached and shown only when newer than the last regular quote and never during the regular session, so Friday's after-hours price shows over the weekend. Totals stay on regular prices; the extended move is shown separately.
 - **Trends chart**: Finnhub free has no price history (candles return 403), so history comes from **Twelve Data** free (8 req/min, 800/day, user's own key). Daily closes up to 1Y, weekly for 5Y, cached 6 h. Up to 8 stocks; % change indexed to range start (single axis), price mode for one stock. Colours follow the stock, validated palette, legend + end labels + table view. Lazy-loaded.
 
+## 7b. Portfolio v2 (added 2026-10-04)
+
+- **Data model** (per profile, all optional in old saves): `sales`, `dividends`, `cash`, `watchlist`, `alerts`. Parsed with defaults, so existing data keeps working.
+- **Sells / realized gains**: FIFO per symbol; a sale only consumes shares bought on/before its date; fees on buys are spread per share, fees on sales reduce proceeds. Oversold shares are flagged.
+- **Holdings columns**: weight (of stocks + cash), holding period (cost-weighted), annualized return (CAGR, only after ≥ 1 year).
+- **Performance chart**: value = Σ shares held × close (prices carried over gaps); net invested = buys − sale proceeds; return is time-weighted (cash flows removed) vs SPY. Price return only.
+- **Allocation**: by stock or by Finnhub industry (`/stock/profile2`, cached 30 days; ETFs → “Funds & ETFs”); top 7 + Other + Cash.
+- **Dividends** are manual — Finnhub’s dividend endpoints are premium (403 on free).
+- **Alerts**: checked on every price update against the latest price (after-hours when present); one-shot with re-arm; Notification API when permitted, in-page banner always.
+- **CSV**: own format `date,type,symbol,shares,price,amount,fees,notes`; broker files detected by header names (skips preamble rows; sums commission + fee columns).
+- **Themes**: class-based dark mode (`.dark`), black theme remaps Tailwind’s darkest slates; applied before first paint by an inline script.
+- **PWA**: `manifest.webmanifest`, icons, `sw.js` (network-first pages, cache-first hashed assets; APIs never cached).
+
 ## 8. Testing
 
 | Level          | Tool                    | What                                                             |

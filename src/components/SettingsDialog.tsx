@@ -1,17 +1,23 @@
 import { useRef, useState } from 'react'
+import { exportCsv, importTransactions, type ImportResult } from '../lib/csv'
 import { exportState, parseState } from '../lib/storage'
-import type { AppState, Settings } from '../types'
+import type { Theme } from '../hooks/useTheme'
+import { activeProfile } from '../state/reducer'
+import type { AppState, Book, Settings } from '../types'
 import { Button, Field, inputClass, Modal } from './ui'
 
 interface Props {
   state: AppState
   onSave: (settings: Partial<Settings>) => void
   onImport: (state: AppState) => void
+  onImportBook: (book: Book) => void
+  theme: Theme
+  onTheme: (t: Theme) => void
   onClearAll: () => void
   onClose: () => void
 }
 
-export function SettingsDialog({ state, onSave, onImport, onClearAll, onClose }: Props) {
+export function SettingsDialog({ state, onSave, onImport, onImportBook, theme, onTheme, onClearAll, onClose }: Props) {
   const [apiKey, setApiKey] = useState(state.settings.finnhubApiKey ?? '')
   const [tdKey, setTdKey] = useState(state.settings.twelveDataApiKey ?? '')
   const [showKey, setShowKey] = useState(false)
@@ -19,6 +25,9 @@ export function SettingsDialog({ state, onSave, onImport, onClearAll, onClose }:
   const [message, setMessage] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null)
   const [confirmClear, setConfirmClear] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
+  const csvRef = useRef<HTMLInputElement>(null)
+  const [csv, setCsv] = useState<ImportResult | null>(null)
+  const profile = activeProfile(state)
 
   const save = () => {
     onSave({
@@ -29,15 +38,27 @@ export function SettingsDialog({ state, onSave, onImport, onClearAll, onClose }:
     onClose()
   }
 
-  const download = () => {
-    const blob = new Blob([exportState(state)], { type: 'application/json' })
-    const url = URL.createObjectURL(blob)
+  const saveFile = (text: string, type: string, name: string) => {
+    const url = URL.createObjectURL(new Blob([text], { type }))
     const a = document.createElement('a')
     a.href = url
-    a.download = `portfolio-tracker-${new Date().toISOString().slice(0, 10)}.json`
+    a.download = name
     a.click()
     URL.revokeObjectURL(url)
   }
+  const stamp = () => new Date().toISOString().slice(0, 10)
+  const download = () => saveFile(exportState(state), 'application/json', `portfolio-tracker-${stamp()}.json`)
+  const downloadCsv = () =>
+    saveFile(
+      exportCsv(profile),
+      'text/csv',
+      `portfolio-${profile.name.replace(/[^\w-]+/g, '-').toLowerCase()}-${stamp()}.csv`,
+    )
+  const readCsv = async (file: File) => {
+    setMessage(null)
+    setCsv(importTransactions(await file.text()))
+  }
+  const csvCount = csv ? csv.book.lots.length + csv.book.sales.length + csv.book.dividends.length : 0
 
   const importFile = async (file: File) => {
     try {
@@ -137,6 +158,110 @@ export function SettingsDialog({ state, onSave, onImport, onClearAll, onClose }:
         </div>
 
         <hr className="border-slate-200 dark:border-slate-800" />
+
+        <div>
+          <h3 className="text-sm font-medium">Appearance</h3>
+          <div
+            role="radiogroup"
+            aria-label="Appearance"
+            className="mt-2 grid grid-cols-4 rounded-lg border border-slate-200 p-0.5 dark:border-slate-700"
+          >
+            {(
+              [
+                ['light', 'Light'],
+                ['dark', 'Dark'],
+                ['black', 'Black'],
+                ['system', 'Auto'],
+              ] as const
+            ).map(([id, label]) => (
+              <button
+                key={id}
+                type="button"
+                role="radio"
+                aria-checked={theme === id}
+                onClick={() => onTheme(id)}
+                className={`rounded-md py-1.5 text-sm font-medium ${theme === id ? 'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900' : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'}`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <p className="mt-1 text-xs text-slate-500">
+            Black uses true black backgrounds — easiest on OLED phone screens at night.
+          </p>
+        </div>
+
+        <div>
+          <h3 className="text-sm font-medium">Install as an app</h3>
+          <p className="mt-1 text-xs text-slate-500">
+            iPhone/iPad: Safari → Share → <strong>Add to Home Screen</strong>. Android/Chrome/Edge: menu →{' '}
+            <strong>Install app</strong>. Opens full-screen and shows your last prices even offline.
+          </p>
+        </div>
+
+        <div>
+          <h3 className="text-sm font-medium">Transactions (CSV)</h3>
+          <p className="mt-1 text-xs text-slate-500">
+            Export <strong>{profile.name}</strong> as a spreadsheet, or import a CSV from your broker (Fidelity, Schwab,
+            Robinhood and similar “activity/history” exports) or one exported here.
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Button onClick={downloadCsv}>Export CSV</Button>
+            <Button onClick={() => csvRef.current?.click()}>Import CSV…</Button>
+            <input
+              ref={csvRef}
+              type="file"
+              accept=".csv,text/csv"
+              className="hidden"
+              aria-label="Import CSV file"
+              onChange={(e) => {
+                const f = e.target.files?.[0]
+                if (f) void readCsv(f)
+                e.target.value = ''
+              }}
+            />
+          </div>
+          {csv && (
+            <div
+              className="mt-3 rounded-lg border border-slate-200 p-3 text-sm dark:border-slate-700"
+              aria-label="CSV import preview"
+            >
+              <p className="font-medium">
+                Found {csv.book.lots.length} buys, {csv.book.sales.length} sales, {csv.book.dividends.length} dividends
+                <span className="font-normal text-slate-500"> · {csv.format}</span>
+              </p>
+              {csv.skipped.length > 0 && (
+                <details className="mt-1 text-xs text-slate-500">
+                  <summary className="cursor-pointer">{csv.skipped.length} rows skipped</summary>
+                  <ul className="mt-1 max-h-32 overflow-auto">
+                    {csv.skipped.slice(0, 50).map((x) => (
+                      <li key={x.line}>
+                        Line {x.line}: {x.reason}
+                      </li>
+                    ))}
+                  </ul>
+                </details>
+              )}
+              <div className="mt-2 flex gap-2">
+                <Button
+                  variant="primary"
+                  disabled={csvCount === 0}
+                  onClick={() => {
+                    onImportBook(csv.book)
+                    setMessage({ kind: 'ok', text: `Added ${csvCount} transactions to ${profile.name}.` })
+                    setCsv(null)
+                  }}
+                >
+                  Add to {profile.name}
+                </Button>
+                <Button onClick={() => setCsv(null)}>Cancel</Button>
+              </div>
+              <p className="mt-1 text-xs text-slate-500">
+                Transactions are added to what’s already there — import into an empty profile to avoid duplicates.
+              </p>
+            </div>
+          )}
+        </div>
 
         <div>
           <h3 className="text-sm font-medium">Backup</h3>
