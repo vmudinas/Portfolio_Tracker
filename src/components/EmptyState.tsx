@@ -1,6 +1,14 @@
 import { Button, Card } from './ui'
 
-export function EmptyState({ onAdd, onLoadSample }: { onAdd: () => void; onLoadSample: () => void }) {
+export function EmptyState({
+  onAdd,
+  onLoadSample,
+  onRestore,
+}: {
+  onAdd: () => void
+  onLoadSample: () => void
+  onRestore: () => void
+}) {
   return (
     <Card className="px-6 py-14 text-center">
       <h2 className="text-lg font-semibold">No stocks in this portfolio yet</h2>
@@ -13,6 +21,12 @@ export function EmptyState({ onAdd, onLoadSample }: { onAdd: () => void; onLoadS
         </Button>
         <Button onClick={onLoadSample}>Load sample portfolio</Button>
       </div>
+      <p className="mt-6 text-sm text-slate-500">
+        Had data here before?{' '}
+        <button type="button" onClick={onRestore} className="font-medium text-teal-700 underline dark:text-teal-400">
+          Restore from a backup file
+        </button>
+      </p>
     </Card>
   )
 }

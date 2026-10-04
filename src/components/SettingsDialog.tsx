@@ -1,6 +1,5 @@
 import { useRef, useState } from 'react'
 import { exportCsv, importTransactions, type ImportResult } from '../lib/csv'
-import { exportState, parseState } from '../lib/storage'
 import type { Theme } from '../hooks/useTheme'
 import { activeProfile } from '../state/reducer'
 import type { AppState, Book, Settings } from '../types'
@@ -9,7 +8,7 @@ import { Button, Field, inputClass, Modal } from './ui'
 interface Props {
   state: AppState
   onSave: (settings: Partial<Settings>) => void
-  onImport: (state: AppState) => void
+  onOpenBackup: () => void
   onImportBook: (book: Book) => void
   theme: Theme
   onTheme: (t: Theme) => void
@@ -17,14 +16,22 @@ interface Props {
   onClose: () => void
 }
 
-export function SettingsDialog({ state, onSave, onImport, onImportBook, theme, onTheme, onClearAll, onClose }: Props) {
+export function SettingsDialog({
+  state,
+  onSave,
+  onOpenBackup,
+  onImportBook,
+  theme,
+  onTheme,
+  onClearAll,
+  onClose,
+}: Props) {
   const [apiKey, setApiKey] = useState(state.settings.finnhubApiKey ?? '')
   const [tdKey, setTdKey] = useState(state.settings.twelveDataApiKey ?? '')
   const [showKey, setShowKey] = useState(false)
   const [refresh, setRefresh] = useState(String(state.settings.refreshSeconds))
   const [message, setMessage] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null)
   const [confirmClear, setConfirmClear] = useState(false)
-  const fileRef = useRef<HTMLInputElement>(null)
   const csvRef = useRef<HTMLInputElement>(null)
   const [csv, setCsv] = useState<ImportResult | null>(null)
   const profile = activeProfile(state)
@@ -47,7 +54,6 @@ export function SettingsDialog({ state, onSave, onImport, onImportBook, theme, o
     URL.revokeObjectURL(url)
   }
   const stamp = () => new Date().toISOString().slice(0, 10)
-  const download = () => saveFile(exportState(state), 'application/json', `portfolio-tracker-${stamp()}.json`)
   const downloadCsv = () =>
     saveFile(
       exportCsv(profile),
@@ -59,25 +65,6 @@ export function SettingsDialog({ state, onSave, onImport, onImportBook, theme, o
     setCsv(importTransactions(await file.text()))
   }
   const csvCount = csv ? csv.book.lots.length + csv.book.sales.length + csv.book.dividends.length : 0
-
-  const importFile = async (file: File) => {
-    try {
-      const parsed = parseState(JSON.parse(await file.text()))
-      if (!parsed) throw new Error('bad file')
-      // Keep this browser's API keys; backups never contain them.
-      onImport({
-        ...parsed,
-        settings: {
-          ...parsed.settings,
-          finnhubApiKey: state.settings.finnhubApiKey,
-          twelveDataApiKey: state.settings.twelveDataApiKey,
-        },
-      })
-      setMessage({ kind: 'ok', text: `Imported ${parsed.profiles.length} profile(s).` })
-    } catch {
-      setMessage({ kind: 'error', text: 'That file is not a Portfolio Tracker backup.' })
-    }
-  }
 
   return (
     <Modal title="Settings" onClose={onClose}>
@@ -264,26 +251,14 @@ export function SettingsDialog({ state, onSave, onImport, onImportBook, theme, o
         </div>
 
         <div>
-          <h3 className="text-sm font-medium">Backup</h3>
+          <h3 className="text-sm font-medium">Backup &amp; restore</h3>
           <p className="mt-1 text-xs text-slate-500">
-            Your data lives only in this browser. Export a file to back it up or move it to another device.
+            Save everything to a file so you can restore it if this browser’s data is cleared, or move to another
+            device.
           </p>
-          <div className="mt-3 flex flex-wrap gap-2">
-            <Button onClick={download}>Export JSON</Button>
-            <Button onClick={() => fileRef.current?.click()}>Import JSON</Button>
-            <input
-              ref={fileRef}
-              type="file"
-              accept="application/json,.json"
-              className="hidden"
-              aria-label="Import backup file"
-              onChange={(e) => {
-                const f = e.target.files?.[0]
-                if (f) void importFile(f)
-                e.target.value = ''
-              }}
-            />
-          </div>
+          <Button className="mt-2" onClick={onOpenBackup}>
+            Open backup &amp; restore
+          </Button>
           {message && (
             <p role="status" className={`mt-2 text-sm ${message.kind === 'ok' ? 'text-emerald-600' : 'text-rose-600'}`}>
               {message.text}
