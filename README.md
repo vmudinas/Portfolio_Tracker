@@ -8,43 +8,46 @@ Enter a stock symbol, how many shares you bought, and the price you paid. Portfo
 
 - Add any number of stocks by ticker symbol (e.g. `AAPL`, `MSFT`, `TSLA`)
 - Record shares, purchase price, and purchase date — multiple buys (lots) of the same stock supported
-- Live/current prices pulled from a market-data API
+- Current prices from the Finnhub market-data API
 - Per-position and total **gain / loss** in dollars and percent
 - Portfolio totals: cost basis, market value, today's change
 - Allocation chart and performance chart
-- Edit / delete positions, import / export CSV
+- Multiple local profiles (no login) — switch between portfolios
+- Edit / delete positions, import / export JSON & CSV
 
 ## Tech stack
 
 | Layer | Technology |
 |---|---|
-| Frontend | React + TypeScript (Vite) |
-| Backend | Node.js + Express + TypeScript (API proxy for stock quotes) |
-| Market data | Finnhub (free tier) — key kept on the server |
-| Tests | Vitest, React Testing Library, Supertest |
-| CI/CD | GitHub Actions |
-| Hosting | Frontend on GitHub Pages; backend on a free Node host (see plan) |
+| App | React 19 + TypeScript (Vite) |
+| Styling | Tailwind CSS v4 |
+| Data | Browser localStorage — no server, no login; multiple local profiles |
+| Market data | [Finnhub](https://finnhub.io) free API — each user enters their own key in Settings |
+| Tests / lint | Vitest + React Testing Library, oxlint |
+| CI/CD | GitHub Actions → GitHub Pages |
+
+Live site (after first deploy): https://vmudinas.github.io/Portfolio_Tracker/
 
 ## Project status
 
-Planning. See [docs/PLAN.md](docs/PLAN.md) for the full step-by-step plan and the decisions to make before implementation.
+Phases 1–2 (scaffolding, CI/CD) done; Phase 3 (core features) next. See [docs/PLAN.md](docs/PLAN.md).
 
-## Repository layout (target)
+## Development
 
-```
-Portfolio_Tracker/
-├── client/            # React app (deployed to GitHub Pages)
-├── server/            # Node/Express API (quote proxy + cache)
-├── docs/PLAN.md       # Architecture & implementation plan
-└── .github/workflows/ # CI (lint, test, build) and CD (deploy)
-```
-
-## Getting started (once implemented)
+Requires Node 22+.
 
 ```bash
-npm install          # installs client + server workspaces
-npm run dev          # runs client (Vite) and server together
-npm test             # runs all tests
+npm install
+npm run dev        # http://localhost:5173/Portfolio_Tracker/
+npm test           # unit + component tests
+npm run lint       # oxlint
+npm run typecheck  # tsc
+npm run build      # production build in dist/
 ```
+
+## Deployment
+
+Pushing to `main` runs `.github/workflows/deploy.yml`, which tests, builds and publishes `dist/` to GitHub Pages.
+One-time setup: **Settings → Pages → Source: GitHub Actions**.
 
 > Disclaimer: this is a personal tracking tool, not financial advice. Quote data may be delayed.

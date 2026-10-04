@@ -1,219 +1,158 @@
 # Portfolio Tracker — Implementation Plan
 
-Status: **Draft — awaiting decisions** (see [Decision points](#decision-points)).
+Status: **Decisions made (2026-10-04) — Phases 1–2 done on `feature/initial-plan`.**
 
 ---
 
 ## 1. Goal
 
-A React + Node.js web app where a user can:
+A React web app where a user can:
 
 1. Enter a stock symbol, number of shares, and the price they bought at
 2. Hold multiple stocks (and multiple purchases of the same stock)
 3. See current price, market value, and **how much they earned / lost** ($ and %) per position and in total
+4. Switch between several **profiles** (e.g. "Me", "Wife", "Retirement") without logging in
 
-Deployed automatically with GitHub Actions; frontend hosted for free on GitHub Pages.
-
----
-
-## 2. Important constraint: GitHub Pages is static-only
-
-GitHub Pages serves **static files only** (HTML/CSS/JS). It cannot run a Node.js server. Limits: ~1 GB published site, ~100 GB/month soft bandwidth, and it is not meant for commercial/SaaS use.
-
-So the React app goes on GitHub Pages, and the Node API (if we keep one) must live elsewhere. Why we want a Node API at all:
-
-- **Hide the market-data API key** — anything bundled into the React app is public
-- **Cache quotes** so many page loads don't burn the free-tier rate limit (Finnhub free ≈ 60 calls/min)
-- Room to grow: user accounts, database, scheduled price snapshots
+Deployed automatically with GitHub Actions to GitHub Pages (free static hosting).
 
 ---
 
-## 3. Architecture options
+## 2. Decisions
 
-| | Option A — Frontend only | **Option B — Pages + Node API (recommended)** | Option C — All on one Node host |
-|---|---|---|---|
-| Frontend | GitHub Pages | GitHub Pages | Render / Railway / Fly.io |
-| Backend | none (browser calls Finnhub directly) | Node/Express on Render free tier (or Cloudflare Worker) | same host as frontend |
-| API key | exposed in browser | hidden on server | hidden on server |
-| Cost | $0 | $0 | $0 (free tier) |
-| Downsides | key leak, no caching, rate limits per user | free tier sleeps after idle → first request ~30–60 s | doesn't use GitHub Pages |
-| Matches "React + Node" ask | partially | **yes** | yes |
+| # | Topic | Decision |
+|---|---|---|
+| 1 | Architecture | **Client-only static site** on GitHub Pages. No Node API for now; code is structured so an API can be added later. |
+| 2 | Data storage | **Browser `localStorage`** (portfolio, profiles, settings). JSON export/import for backup and moving between devices. |
+| 3 | Accounts | **No login.** Local **profiles** with a switcher; each profile has its own holdings. |
+| 4 | Market data | **Finnhub** (free tier) behind a provider interface so others can be plugged in. Each user enters their **own free Finnhub key** in Settings; it is kept only in their browser. |
+| 5 | Styling | **Tailwind CSS v4** |
+| 6 | Language | **TypeScript** |
+| 7 | Repo | Public (required for free GitHub Pages) — already public. |
 
-**Recommendation: Option B.** React on GitHub Pages, small Express API on Render's free tier, Finnhub key stored as a Render env var.
+### Why Finnhub (vs. "more than 60 requests/min")
+
+| Provider | Free limit | Notes |
+|---|---|---|
+| **Finnhub** | 60 calls/min | Read-only token, browser-friendly, free WebSocket for live trades. **Chosen.** |
+| Alpaca | 200 calls/min, batch snapshots | IEX-only prices; needs key **+ secret** in headers — unsafe to put in a browser app. Good candidate once we add a backend. |
+| Twelve Data | 8/min, 800/day | Too low |
+| Alpha Vantage | 5/min, 25/day | Too low |
+| Massive (Polygon) Basic | 5/min, end-of-day | Too low |
+
+60/min is enough for a personal app because:
+- each user brings their own key → the limit is **per user**, not shared;
+- quotes are cached for 60 s and refreshed only while the tab is visible;
+- requests are queued/throttled client-side (≤ ~50 symbols/min), with WebSocket live prices as a Phase 5 option.
+
+Exposing a Finnhub key in the browser is low risk (read-only market data). We never commit a key to the repo.
+
+---
+
+## 3. Architecture
 
 ```
- Browser ──► GitHub Pages (React SPA)
-    │
-    └──fetch──► Node/Express API (Render) ──► Finnhub
-                   │  in-memory cache (60 s TTL)
+ Browser ──► GitHub Pages (static React app)
+   │  localStorage: profiles, lots, settings, quote cache
+   └──fetch (user's own key)──► Finnhub REST /quote, /search
 ```
+
+Code layout:
+
+```
+src/
+├── types.ts            # Lot, Quote, Profile, Settings, AppState, Position
+├── lib/
+│   ├── portfolio.ts    # gain/loss math (pure, unit-tested)   ✅
+│   ├── storage.ts      # load/save/migrate AppState in localStorage
+│   └── csv.ts / json.ts# export / import
+├── providers/
+│   ├── QuoteProvider.ts# interface: getQuote, getQuotes, search
+│   └── finnhub.ts      # Finnhub implementation (+ throttle + cache)
+├── hooks/              # useAppState, useQuotes (TanStack Query)
+├── components/         # SummaryCards, HoldingsTable, LotForm, ProfileSwitcher, Settings
+└── App.tsx
+```
+
+The `QuoteProvider` interface is the seam for later: swap the browser Finnhub provider for a call to our own API (Alpaca/Finnhub server-side) without touching UI code.
 
 ---
 
-## 4. Data & storage
-
-**Phase 1 (MVP): browser `localStorage`** — no login, no database. Portfolio lives in the user's browser; CSV export/import as backup.
-
-**Later (optional): accounts + database** — sync across devices. Candidates: Supabase (Postgres + auth, free tier) or SQLite/Postgres on the API host.
-
-### Data model
+## 4. Data model (stored as one JSON object in localStorage)
 
 ```ts
-type Lot = {
-  id: string;          // uuid
-  symbol: string;      // "AAPL"
-  shares: number;      // 10 (fractional allowed)
-  buyPrice: number;    // 172.50 per share
-  buyDate: string;     // ISO date
-  fees?: number;       // commission
-  notes?: string;
-};
+interface AppState {
+  version: 1                 // for future migrations
+  activeProfileId: string
+  profiles: Profile[]        // { id, name, createdAt, lots: Lot[] }
+  settings: { finnhubApiKey?: string; refreshSeconds: number }
+}
 
-type Quote = {
-  symbol: string;
-  price: number;       // current
-  change: number;      // today $
-  changePct: number;   // today %
-  prevClose: number;
-  updatedAt: string;
-};
+interface Lot {
+  id: string; symbol: string; shares: number
+  buyPrice: number; buyDate: string; fees?: number; notes?: string
+}
 ```
 
-### Calculations (per symbol, aggregating lots)
+A static, read-only `public/sample-portfolio.json` will ship as demo data ("Load sample" button). Note: a static site **cannot write files back to the repo**, so user edits always live in the browser; export/import JSON is how you back up or move them.
+
+### Calculations (`src/lib/portfolio.ts`, done + tested)
 
 - Cost basis = Σ(shares × buyPrice + fees)
 - Market value = Σshares × currentPrice
-- Gain/Loss $ = market value − cost basis
-- Gain/Loss % = gain / cost basis × 100
-- Avg cost/share = cost basis / Σshares
-- Today's change = Σshares × quote.change
-- Portfolio totals = sums of the above; allocation % = position value / total value
+- Gain/Loss $ = market value − cost basis; Gain/Loss % = gain / cost basis × 100
+- Avg cost/share, today's change (Σshares × quote.change), portfolio totals
+- Positions with no quote yet are excluded from totals and flagged
 
 ---
 
-## 5. Backend API (Node + Express + TypeScript)
+## 5. Screens
 
-| Method | Route | Purpose |
+- **Header** — profile switcher (create / rename / delete profile), Settings button
+- **Summary cards** — Total value, Cost basis, Total G/L $ / %, Today's change
+- **Holdings table** — symbol, shares, avg cost, price, value, G/L $, G/L %, today; green/red; sortable; expand row → individual lots
+- **Add / edit lot form** — symbol (validated via Finnhub search), shares, buy price, date, fees
+- **Settings** — Finnhub key (with "get a free key" link), refresh interval, export/import JSON & CSV, clear data
+- **Empty state** — "Add your first stock" + "Load sample portfolio"
+
+---
+
+## 6. CI/CD (GitHub Actions) ✅
+
+| Workflow | Trigger | Steps |
 |---|---|---|
-| GET | `/api/health` | health check (used by CI smoke test & uptime) |
-| GET | `/api/quote/:symbol` | current quote for one symbol |
-| GET | `/api/quotes?symbols=AAPL,MSFT` | batch quotes |
-| GET | `/api/search?q=apple` | symbol lookup / validation |
-| GET | `/api/history/:symbol?range=1M` | price history for charts (Phase 3) |
+| `ci.yml` | every PR, pushes to non-main branches | `npm ci` → lint (oxlint) → typecheck → tests (Vitest) → build |
+| `deploy.yml` | push to `main`, manual | same checks → build → upload `dist/` → deploy to GitHub Pages |
+| `dependabot.yml` | weekly | npm + Actions updates |
 
-Cross-cutting: CORS limited to the GitHub Pages origin, 60 s in-memory cache, rate limiting (`express-rate-limit`), input validation (`zod`), `helmet`, structured logging.
+Site URL after first deploy: **https://vmudinas.github.io/Portfolio_Tracker/**
 
----
+### One-time GitHub setup (manual, in the repo's Settings)
+1. **Settings → Pages → Build and deployment → Source: GitHub Actions**
+2. (Recommended) **Settings → Branches** → protect `main`: require PR + passing `CI / verify`
 
-## 6. Frontend (React + Vite + TypeScript)
-
-Screens / components:
-
-- **Dashboard** — summary cards (Total value, Cost basis, Total G/L $/% , Today's change)
-- **Holdings table** — symbol, shares, avg cost, price, value, G/L $, G/L %, today; green/red coloring; sortable
-- **Add / Edit position form** — symbol (validated via `/api/search`), shares, buy price, date, fees
-- **Lot detail** — expand a row to see each individual purchase
-- **Charts** — allocation pie, portfolio value over time (Recharts)
-- **Settings** — refresh interval, CSV import/export, clear data
-
-Libraries: React Router (HashRouter — works on Pages without 404 hacks), TanStack Query (fetching, caching, auto-refresh), Recharts, zod, a light UI kit (Tailwind or MUI — decision).
-
-Vite config: `base: '/Portfolio_Tracker/'` so assets resolve under the Pages URL.
+No secrets are needed — there is no server and no committed API key.
 
 ---
 
-## 7. Repository structure (npm workspaces monorepo)
-
-```
-Portfolio_Tracker/
-├── package.json              # workspaces: client, server
-├── client/
-│   ├── src/{components,pages,hooks,lib,types}
-│   ├── vite.config.ts
-│   └── package.json
-├── server/
-│   ├── src/{routes,services,middleware}
-│   ├── tests/
-│   └── package.json
-├── docs/PLAN.md
-├── .github/workflows/
-│   ├── ci.yml
-│   ├── deploy-client.yml
-│   └── deploy-server.yml
-└── .editorconfig, .nvmrc, .gitignore, eslint/prettier config
-```
-
----
-
-## 8. CI/CD with GitHub Actions
-
-### `ci.yml` — on every pull request and push
-1. Checkout, setup Node 22, `npm ci` (with cache)
-2. Lint (ESLint) + format check (Prettier)
-3. Type-check (`tsc --noEmit`)
-4. Unit tests (Vitest) + coverage
-5. Build client and server
-
-### `deploy-client.yml` — on push to `main`
-1. Build client with `VITE_API_URL` (repo variable)
-2. `actions/upload-pages-artifact` → `actions/deploy-pages`
-3. Result: `https://vmudinas.github.io/Portfolio_Tracker/`
-
-### `deploy-server.yml` — on push to `main` when `server/**` changes
-1. Run server tests
-2. Trigger Render deploy hook (`RENDER_DEPLOY_HOOK` secret)
-3. Smoke test: poll `/api/health` until 200
-
-### One-time GitHub setup
-- Settings → Pages → Source: **GitHub Actions**
-- Settings → Secrets and variables → Actions: `RENDER_DEPLOY_HOOK` (secret), `VITE_API_URL` (variable)
-- Branch protection on `main`: require PR + passing CI
-- Dependabot for npm and GitHub Actions
-
-### External setup
-- Finnhub account → free API key
-- Render account → new Web Service from this repo (`server/`), env var `FINNHUB_API_KEY`, `ALLOWED_ORIGIN`
-
----
-
-## 9. Testing strategy
+## 7. Testing
 
 | Level | Tool | What |
 |---|---|---|
-| Unit | Vitest | G/L math, lot aggregation, CSV parse, cache logic |
-| Component | React Testing Library | form validation, holdings table rendering, colors |
-| API | Supertest + mocked Finnhub | routes, validation, caching, error handling |
-| E2E (optional) | Playwright | add stock → see G/L, runs in CI against preview build |
+| Unit | Vitest | G/L math ✅, storage migrations, CSV/JSON import, throttle/cache |
+| Component | React Testing Library | form validation, table rendering, profile switching |
+| Provider | Vitest + mocked `fetch` | Finnhub parsing, error/rate-limit handling |
+| E2E (optional) | Playwright | add stock → see G/L, against `vite preview` in CI |
 
 ---
 
-## 10. Step-by-step roadmap
+## 8. Roadmap
 
-Each phase ends with a working, deployed increment and a **go / no-go** checkpoint.
-
-| Phase | Deliverable | Est. effort |
+| Phase | Deliverable | Status |
 |---|---|---|
-| **0. Setup** ✅ (in progress) | Feature branch, README, this plan | done |
-| **1. Scaffolding** | Monorepo, Vite React app, Express app, lint/format/tsconfig, `ci.yml` green | ~0.5 day |
-| **2. Deploy pipeline (hello world)** | Client live on GitHub Pages, server live on Render, `/api/health` smoke test | ~0.5 day |
-| **3. Core MVP** | Add/edit/delete positions, localStorage, quotes via API, holdings table with G/L, summary cards | ~1–2 days |
-| **4. Quality** | Unit/component/API tests, error & loading states, empty states, responsive layout | ~1 day |
-| **5. Charts & extras** | Allocation pie, history chart, CSV import/export, auto-refresh, dark mode | ~1 day |
-| **6. Optional: accounts** | Auth + database (Supabase), cross-device sync | ~2 days |
-| **7. Optional: polish** | Dividends, realized gains (sells), multiple portfolios, price alerts | TBD |
-
-Getting the pipeline live **before** building features (Phase 2) means every later change ships automatically.
-
----
-
-## Decision points
-
-Please decide before Phase 1:
-
-1. **Architecture** — Option A (frontend only), **B (Pages + Node API on Render — recommended)**, or C (everything on one host)?
-2. **Backend host** (if B) — **Render free** (simple, sleeps when idle), Cloudflare Workers (no sleep, but not Express), or Vercel serverless?
-3. **Market data provider** — **Finnhub** (60 calls/min free, recommended), Alpha Vantage (very low daily free quota), Twelve Data, or Polygon?
-4. **Storage for MVP** — **localStorage (recommended)** or go straight to accounts + database?
-5. **UI styling** — Tailwind CSS or MUI (Material UI)?
-6. **Language** — **TypeScript (recommended)** or plain JavaScript?
-7. **Repo visibility** — GitHub Pages on a free account requires the repo to be **public**. OK?
+| 0. Setup | Branch, README, plan | ✅ |
+| 1. Scaffolding | Vite + React 19 + TS + Tailwind v4, oxlint, Vitest, G/L math + tests | ✅ |
+| 2. Pipeline | `ci.yml`, `deploy.yml` → GitHub Pages | ✅ (live after merge to `main` + Pages source set) |
+| 3. Core MVP | localStorage state + profiles, add/edit/delete lots, Finnhub provider, holdings table, summary cards, Settings | ⏭ next |
+| 4. Quality | Tests for all of the above, loading/error/empty states, responsive, accessibility pass | |
+| 5. Extras | Allocation & history charts, CSV/JSON import/export, sample data, WebSocket live prices, dark-mode toggle | |
+| 6. Later | Optional backend (Node API / serverless) for Alpaca or server-side keys, real accounts + cloud sync, dividends, sells & realized gains | |
