@@ -1,7 +1,91 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { describe, expect, it } from 'vitest'
 import App from './App'
+import { defaultState, saveState } from './lib/storage'
+import type { QuoteProvider } from './providers/QuoteProvider'
 
-it('renders the app title', () => {
-  render(<App />)
-  expect(screen.getByRole('heading', { level: 1, name: 'Portfolio Tracker' })).toBeInTheDocument()
+const prices: Record<string, number> = { AAPL: 200, MSFT: 300 }
+const fakeProvider: QuoteProvider = {
+  name: 'fake',
+  getQuote: async (s) =>
+    prices[s]
+      ? { symbol: s, price: prices[s], change: 2, changePct: 1, prevClose: prices[s] - 2, updatedAt: '' }
+      : null,
+  search: async () => [],
+}
+const factory = () => fakeProvider
+
+function withKey() {
+  const s = defaultState()
+  s.settings.finnhubApiKey = 'test'
+  saveState(s)
+}
+
+async function addLot(user: ReturnType<typeof userEvent.setup>, symbol: string, shares: string, price: string) {
+  await user.click(screen.getAllByRole('button', { name: /add (your first )?stock/i })[0])
+  const dialog = screen.getByRole('dialog', { name: 'Add a purchase' })
+  await user.type(within(dialog).getByLabelText('Symbol'), symbol)
+  await user.type(within(dialog).getByLabelText('Shares'), shares)
+  await user.type(within(dialog).getByLabelText(/price paid/i), price)
+  await user.click(within(dialog).getByRole('button', { name: 'Add purchase' }))
+  // let the (fake) price fetch settle so React state updates happen inside the test
+  await screen.findByText(/prices updated/i)
+}
+
+describe('App', () => {
+  it('renders the title and asks for an API key', () => {
+    render(<App providerFactory={factory} />)
+    expect(screen.getByRole('heading', { level: 1, name: 'Portfolio Tracker' })).toBeInTheDocument()
+    expect(screen.getByText(/add your free finnhub api key/i)).toBeInTheDocument()
+  })
+
+  it('adds a stock and shows gain/loss', async () => {
+    withKey()
+    const user = userEvent.setup()
+    render(<App providerFactory={factory} />)
+    await addLot(user, 'aapl', '10', '150')
+
+    const table = screen.getByRole('table')
+    expect(within(table).getByText('AAPL')).toBeInTheDocument()
+    await waitFor(() => expect(within(table).getAllByText('+$500.00').length).toBeGreaterThan(0))
+    expect(within(table).getByText('+33.33%')).toBeInTheDocument()
+    expect(screen.getByLabelText('Portfolio summary')).toHaveTextContent('$2,000.00')
+  })
+
+  it('validates the form', async () => {
+    const user = userEvent.setup()
+    render(<App providerFactory={factory} />)
+    await user.click(screen.getByRole('button', { name: /add your first stock/i }))
+    await user.click(screen.getByRole('button', { name: 'Add purchase' }))
+    expect(screen.getByText('Enter a ticker like AAPL')).toBeInTheDocument()
+    expect(screen.getByText('Shares must be more than 0')).toBeInTheDocument()
+  })
+
+  it('keeps each profile separate', async () => {
+    withKey()
+    const user = userEvent.setup()
+    render(<App providerFactory={factory} />)
+    await addLot(user, 'MSFT', '1', '250')
+    expect(screen.getByRole('table')).toBeInTheDocument()
+
+    await user.selectOptions(screen.getByLabelText('Profile'), '__new')
+    await user.type(screen.getByLabelText('Profile name'), 'Retirement')
+    await user.click(screen.getByRole('button', { name: 'Create' }))
+    expect(screen.getByText(/no stocks in this portfolio yet/i)).toBeInTheDocument()
+
+    await user.selectOptions(screen.getByLabelText('Profile'), 'My portfolio')
+    expect(within(screen.getByRole('table')).getByText('MSFT')).toBeInTheDocument()
+  })
+
+  it('persists data across reloads', async () => {
+    withKey()
+    const user = userEvent.setup()
+    const { unmount } = render(<App providerFactory={factory} />)
+    await addLot(user, 'AAPL', '1', '100')
+    unmount()
+    render(<App providerFactory={factory} />)
+    expect(within(screen.getByRole('table')).getByText('AAPL')).toBeInTheDocument()
+    await screen.findByText(/prices updated/i)
+  })
 })
