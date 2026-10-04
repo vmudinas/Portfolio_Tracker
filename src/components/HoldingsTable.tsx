@@ -153,6 +153,7 @@ export function HoldingsTable({ positions, unknown, onEdit, onDelete, onAddLot }
                         {signedMoney(p.dayChange)}
                         {p.extended && (
                           <div className={`text-xs ${gainColor(p.extended.valueChange)}`}>
+                            <span className="text-slate-500">{p.extended.session === 'pre' ? 'Pre ' : 'AH '}</span>
                             {signedMoney(p.extended.valueChange)}
                           </div>
                         )}

@@ -1,6 +1,6 @@
 # Portfolio Tracker — Implementation Plan
 
-Status: **Decisions made (2026-10-04). Phases 1–2 on `feature/initial-plan`; Phase 3 (core MVP) on `feature/core-mvp`.**
+Status: **Live at https://vmudinas.github.io/Portfolio_Tracker/. Phases 0–3 merged; market hours + trends chart on `feature/market-hours`.**
 
 ---
 
@@ -141,7 +141,14 @@ No secrets are needed — there is no server and no committed API key.
 
 ---
 
-## 7. Testing
+## 7. Market hours, extended hours, trends (added 2026-10-04)
+
+- **Market status**: Finnhub `/stock/market-status` (free) every 5 min gives session `pre | regular | post | closed` (+ holiday), shown as a badge.
+- **Polling**: quotes refresh every N seconds only in the regular session. Pre/post/closed: one fetch per page load, plus one extra fetch when the regular session ends (closing price). Manual Refresh always works.
+- **Pre-market / after-hours**: Finnhub WebSocket trades (free, up to 50 symbols, separate from the REST limit) during pre/post sessions. Latest trade per symbol is cached and shown only when newer than the last regular quote and never during the regular session, so Friday's after-hours price shows over the weekend. Totals stay on regular prices; the extended move is shown separately.
+- **Trends chart**: Finnhub free has no price history (candles return 403), so history comes from **Twelve Data** free (8 req/min, 800/day, user's own key). Daily closes up to 1Y, weekly for 5Y, cached 6 h. Up to 8 stocks; % change indexed to range start (single axis), price mode for one stock. Colours follow the stock, validated palette, legend + end labels + table view. Lazy-loaded.
+
+## 8. Testing
 
 | Level          | Tool                    | What                                                             |
 | -------------- | ----------------------- | ---------------------------------------------------------------- |
@@ -152,14 +159,14 @@ No secrets are needed — there is no server and no committed API key.
 
 ---
 
-## 8. Roadmap
+## 9. Roadmap
 
-| Phase          | Deliverable                                                                                                                            | Status                                             |
-| -------------- | -------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------- |
-| 0. Setup       | Branch, README, plan                                                                                                                   | ✅                                                 |
-| 1. Scaffolding | Vite + React 19 + TS + Tailwind v4, oxlint, Vitest, G/L math + tests                                                                   | ✅                                                 |
-| 2. Pipeline    | `ci.yml`, `deploy.yml` → GitHub Pages                                                                                                  | ✅ (live after merge to `main` + Pages source set) |
-| 3. Core MVP    | localStorage state + profiles, add/edit/delete lots, Finnhub provider, holdings table, summary cards, Settings                         | ✅                                                 |
-| 4. Quality     | Tests for all of the above, loading/error/empty states, responsive, accessibility pass                                                 | ⏭ next (partly done: 23 tests, mobile card layout) |
-| 5. Extras      | Allocation & history charts, CSV/JSON import/export, sample data, WebSocket live prices, dark-mode toggle                              |                                                    |
-| 6. Later       | Optional backend (Node API / serverless) for Alpaca or server-side keys, real accounts + cloud sync, dividends, sells & realized gains |                                                    |
+| Phase          | Deliverable                                                                                                                                                                                                 | Status                                             |
+| -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------- |
+| 0. Setup       | Branch, README, plan                                                                                                                                                                                        | ✅                                                 |
+| 1. Scaffolding | Vite + React 19 + TS + Tailwind v4, oxlint, Vitest, G/L math + tests                                                                                                                                        | ✅                                                 |
+| 2. Pipeline    | `ci.yml`, `deploy.yml` → GitHub Pages                                                                                                                                                                       | ✅ (live after merge to `main` + Pages source set) |
+| 3. Core MVP    | localStorage state + profiles, add/edit/delete lots, Finnhub provider, holdings table, summary cards, Settings                                                                                              | ✅                                                 |
+| 4. Quality     | Tests for all of the above, loading/error/empty states, responsive, accessibility pass                                                                                                                      | ⏭ next (partly done: 23 tests, mobile card layout) |
+| 5. Extras      | ✅ history chart (Twelve Data), ✅ JSON backup, ✅ sample data, ✅ WebSocket live prices (pre/after hours), ✅ market-hours polling · ⏭ allocation chart, CSV import/export, portfolio-value-over-time line | partly done                                        |
+| 6. Later       | Optional backend (Node API / serverless) for Alpaca or server-side keys, real accounts + cloud sync, dividends, sells & realized gains                                                                      |                                                    |

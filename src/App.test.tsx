@@ -112,4 +112,33 @@ describe('App', () => {
     expect(within(screen.getByRole('table')).getByText('+10.00%')).toBeInTheDocument()
     expect(screen.getAllByText('After hours').length).toBeGreaterThan(0) // market badge
   })
+
+  it('shows the optional trends chart', async () => {
+    withKey()
+    const user = userEvent.setup()
+    const history = {
+      name: 'fake',
+      getHistory: async () => {
+        const d = (n: number) => new Date(Date.now() - n * 86400000).toISOString().slice(0, 10)
+        return [
+          { date: d(20), close: 100 },
+          { date: d(1), close: 125 },
+        ]
+      },
+    }
+    const { unmount } = render(<App providerFactory={factory} />)
+    await addLot(user, 'AAPL', '1', '100')
+    await user.click(screen.getByRole('button', { name: /chart/i }))
+    // the chart module is lazy-loaded, so allow time for the import
+    expect(await screen.findByRole('button', { name: 'Add Twelve Data key' }, { timeout: 5000 })).toBeInTheDocument()
+    unmount()
+
+    const s = JSON.parse(localStorage.getItem('portfolio-tracker:v1')!)
+    s.settings.twelveDataApiKey = 'td'
+    localStorage.setItem('portfolio-tracker:v1', JSON.stringify(s))
+    render(<App providerFactory={factory} historyFactory={() => history} />)
+    const picker = await screen.findByRole('group', { name: 'Stocks to chart' }, { timeout: 5000 })
+    await waitFor(() => expect(within(picker).getByRole('button', { name: /AAPL/ })).toHaveTextContent('+25.00%'))
+    await screen.findByText(/prices updated/i)
+  })
 })

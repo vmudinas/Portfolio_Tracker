@@ -35,7 +35,10 @@ export interface Profile {
 export interface Settings {
   /** User-supplied Finnhub key, stored only in this browser. */
   finnhubApiKey?: string
+  /** Optional Twelve Data key — enables the trends chart (price history). */
+  twelveDataApiKey?: string
   refreshSeconds: number
+  showTrends?: boolean
 }
 
 /** Everything persisted to localStorage. */
