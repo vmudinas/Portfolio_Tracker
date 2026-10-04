@@ -15,6 +15,7 @@ Enter a stock symbol, how many shares you bought, and the price you paid. Portfo
 - **Market-aware prices** — refresh every minute only while the market is open; pre-market and after-hours moves from Finnhub’s live trade stream
 - **Charts** (optional) — allocation donut (by stock or industry), portfolio performance vs the S&P 500 (time-weighted), and stock comparison
 - **Watchlist & price alerts** — follow stocks you don’t own; get a browser notification when a price crosses your target (while the site is open)
+- **Backup & restore** — one-click backup file of everything (optionally with API keys); restore it after clearing browser data or on a new device, with a preview first. A reminder appears when you have changes that aren’t backed up.
 - **CSV import/export** — import broker activity exports (Fidelity, Schwab, Robinhood-style) or your own export
 - **Profiles** — separate portfolios in one browser, no login
 - **Themes** — light, dark, black (OLED) or match your device

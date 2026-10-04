@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { defaultState, exportState, loadState, parseState, saveState, STORAGE_KEY } from './storage'
+import { defaultState, loadState, parseState, saveState, STORAGE_KEY } from './storage'
 
 describe('parseState', () => {
   it('rejects unrecognised data', () => {
@@ -45,11 +45,4 @@ describe('load/save', () => {
     expect(s.profiles).toHaveLength(1)
     expect(s.profiles[0].lots).toEqual([])
   })
-})
-
-it('export never includes the API key', () => {
-  const s = defaultState()
-  s.settings.finnhubApiKey = 'secret'
-  expect(exportState(s)).not.toContain('secret')
-  expect(parseState(JSON.parse(exportState(s)))?.profiles).toHaveLength(1)
 })

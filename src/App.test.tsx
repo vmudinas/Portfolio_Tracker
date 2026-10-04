@@ -1,6 +1,6 @@
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import App from './App'
 import { defaultState, saveState } from './lib/storage'
 import type { QuoteProvider } from './providers/QuoteProvider'
@@ -217,5 +217,52 @@ describe('App', () => {
     await user.click(screen.getByRole('radio', { name: 'Light' }))
     expect(document.documentElement).not.toHaveClass('dark')
     expect(localStorage.getItem('portfolio-tracker:theme')).toBe('light')
+  })
+
+  it('backs up and restores everything after browser data is cleared', async () => {
+    withKey()
+    const user = userEvent.setup()
+    let saved = ''
+    const createObjectURL = vi.fn((b: Blob) => {
+      void b.text().then((t) => (saved = t))
+      return 'blob:backup'
+    })
+    Object.assign(URL, { createObjectURL, revokeObjectURL: vi.fn() })
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+
+    const { unmount } = render(<App providerFactory={factory} />)
+    await addLot(user, 'AAPL', '10', '150')
+    // reminder appears once there is data and no backup
+    expect(screen.getByRole('button', { name: 'Back up now' })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Backup and restore' }))
+    await user.click(screen.getByRole('button', { name: /download backup/i }))
+    await waitFor(() => expect(saved).toContain('"AAPL"'))
+    expect(click).toHaveBeenCalled()
+    expect(saved).not.toContain('"finnhubApiKey"')
+    unmount()
+
+    // Simulate the browser clearing site data.
+    localStorage.clear()
+    render(<App providerFactory={factory} />)
+    expect(screen.getByText(/no stocks in this portfolio yet/i)).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /restore from a backup file/i }))
+    const file = new File([saved], 'portfolio-tracker-backup.json', { type: 'application/json' })
+    await user.upload(screen.getByLabelText('Backup file'), file)
+    const contents = await screen.findByLabelText('Backup contents')
+    expect(contents).toHaveTextContent('1 transactions')
+    await user.click(within(contents).getByRole('button', { name: 'Restore this backup' }))
+    expect(screen.getByRole('status')).toHaveTextContent('Restored 1 profile(s) and 1 transactions.')
+    await user.click(screen.getByRole('button', { name: 'Close' }))
+    expect(within(screen.getByRole('table')).getByText('AAPL')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Back up now' })).not.toBeInTheDocument()
+    click.mockRestore()
+  })
+
+  it('rejects a file that is not a backup', async () => {
+    const user = userEvent.setup()
+    render(<App providerFactory={factory} />)
+    await user.click(screen.getByRole('button', { name: 'Backup and restore' }))
+    await user.upload(screen.getByLabelText('Backup file'), new File(['hello'], 'x.json', { type: 'application/json' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent(/isn’t a Portfolio Tracker backup/)
   })
 })

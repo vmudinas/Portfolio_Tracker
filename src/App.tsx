@@ -1,5 +1,6 @@
 import { lazy, Suspense, useCallback, useMemo, useState } from 'react'
 import { ActivityList } from './components/ActivityList'
+import { BackupDialog } from './components/BackupDialog'
 import { CashDialog } from './components/CashDialog'
 import { EmptyState } from './components/EmptyState'
 import { HoldingsTable, type TxHandlers } from './components/HoldingsTable'
@@ -12,6 +13,7 @@ import { TransactionForm, type TxEditing, type TxSave } from './components/Trans
 import { Button, Tabs } from './components/ui'
 import { WatchlistPanel } from './components/WatchlistPanel'
 import { describeAlert, useAlerts } from './hooks/useAlerts'
+import { useBackupStatus } from './hooks/useBackupStatus'
 import { useExtendedHours } from './hooks/useExtendedHours'
 import { useMarketStatus } from './hooks/useMarketStatus'
 import { useQuotes } from './hooks/useQuotes'
@@ -44,10 +46,12 @@ function App({ providerFactory = createFinnhubProvider, historyFactory = createT
   const [editing, setEditing] = useState<TxEditing | null>(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [cashOpen, setCashOpen] = useState(false)
+  const [backupOpen, setBackupOpen] = useState(false)
   const [tab, setTab] = useState<Tab>('holdings')
   const [notice, setNotice] = useState<string | null>(null)
 
   const profile = activeProfile(state)
+  const backup = useBackupStatus(state)
   const apiKey = state.settings.finnhubApiKey
   const provider = useMemo(() => (apiKey ? providerFactory(apiKey) : null), [apiKey, providerFactory])
   const tdKey = state.settings.twelveDataApiKey
@@ -160,6 +164,9 @@ function App({ providerFactory = createFinnhubProvider, historyFactory = createT
             onDelete={(id) => dispatch({ type: 'profile/delete', id })}
           />
           <ThemeToggle theme={theme} onChange={setTheme} />
+          <Button aria-label="Backup and restore" title="Backup & restore" onClick={() => setBackupOpen(true)}>
+            ⤓<span className="hidden sm:inline">Backup</span>
+          </Button>
           <Button aria-label="Settings" title="Settings" onClick={() => setSettingsOpen(true)}>
             ⚙<span className="hidden sm:inline">Settings</span>
           </Button>
@@ -173,6 +180,23 @@ function App({ providerFactory = createFinnhubProvider, historyFactory = createT
             <Button variant="primary" onClick={() => setSettingsOpen(true)}>
               Add API key
             </Button>
+          </div>
+        )}
+        {backup.needsBackup && (
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-sky-300 bg-sky-50 px-4 py-3 text-sm text-sky-900 dark:border-sky-800 dark:bg-sky-950/40 dark:text-sky-100">
+            <span>
+              {backup.lastBackupAt
+                ? `You’ve made changes since your last backup (${new Date(backup.lastBackupAt).toLocaleDateString()}).`
+                : 'Your portfolio lives only in this browser. Download a backup so you can restore it if browser data is cleared.'}
+            </span>
+            <span className="flex gap-2">
+              <Button variant="primary" onClick={() => setBackupOpen(true)}>
+                Back up now
+              </Button>
+              <Button variant="ghost" onClick={backup.snooze}>
+                Later
+              </Button>
+            </span>
           </div>
         )}
         {(error || notice) && (
@@ -199,7 +223,11 @@ function App({ providerFactory = createFinnhubProvider, historyFactory = createT
         ))}
 
         {!hasActivity && tab === 'holdings' ? (
-          <EmptyState onAdd={() => setEditing({ kind: 'buy' })} onLoadSample={loadSample} />
+          <EmptyState
+            onAdd={() => setEditing({ kind: 'buy' })}
+            onLoadSample={loadSample}
+            onRestore={() => setBackupOpen(true)}
+          />
         ) : (
           <>
             <SummaryCards summary={summary} onEditCash={() => setCashOpen(true)} />
@@ -315,6 +343,22 @@ function App({ providerFactory = createFinnhubProvider, historyFactory = createT
           onSave={(cash) => dispatch({ type: 'cash/set', cash })}
         />
       )}
+      {backupOpen && (
+        <BackupDialog
+          state={state}
+          theme={theme}
+          lastBackupAt={backup.lastBackupAt}
+          changedSinceBackup={backup.changedSinceBackup}
+          persisted={backup.persisted}
+          onBackedUp={backup.markBackedUp}
+          onRestore={(next, restoredTheme) => {
+            backup.markRestored()
+            dispatch({ type: 'state/replace', state: next })
+            if (restoredTheme) setTheme(restoredTheme)
+          }}
+          onClose={() => setBackupOpen(false)}
+        />
+      )}
       {settingsOpen && (
         <SettingsDialog
           state={state}
@@ -322,7 +366,10 @@ function App({ providerFactory = createFinnhubProvider, historyFactory = createT
           onTheme={setTheme}
           onClose={() => setSettingsOpen(false)}
           onSave={(settings) => dispatch({ type: 'settings/update', settings })}
-          onImport={(next) => dispatch({ type: 'state/replace', state: next })}
+          onOpenBackup={() => {
+            setSettingsOpen(false)
+            setBackupOpen(true)
+          }}
           onImportBook={(b) => dispatch({ type: 'book/import', book: b })}
           onClearAll={() => dispatch({ type: 'state/replace', state: defaultState() })}
         />

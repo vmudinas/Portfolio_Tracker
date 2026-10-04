@@ -147,9 +147,3 @@ export function saveState(state: AppState): void {
     // storage full or blocked — app keeps working in memory
   }
 }
-
-/** JSON for the "Export" button. API keys are left out so backups are safe to share. */
-export function exportState(state: AppState): string {
-  const settings: Settings = { refreshSeconds: state.settings.refreshSeconds, showTrends: state.settings.showTrends }
-  return JSON.stringify({ ...state, settings }, null, 2)
-}
