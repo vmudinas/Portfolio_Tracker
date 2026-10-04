@@ -1,6 +1,6 @@
 import { Fragment, useState } from 'react'
 import { lotCost } from '../lib/portfolio'
-import { gainColor, money, shares as fmtShares, signedMoney, signedPct } from '../lib/format'
+import { extendedLabel, gainColor, money, shares as fmtShares, signedMoney, signedPct } from '../lib/format'
 import type { Lot, Position } from '../types'
 import { Button, Card } from './ui'
 
@@ -70,6 +70,7 @@ export function HoldingsTable({ positions, unknown, onEdit, onDelete, onAddLot }
                       {signedMoney(p.gain)} <span className="text-xs">({signedPct(p.gainPct)})</span>
                     </p>
                     <p className={`text-xs ${gainColor(p.dayChange)}`}>Today {signedMoney(p.dayChange)}</p>
+                    {p.extended && <ExtendedLine move={p.extended} withValue />}
                   </div>
                 </button>
                 {isOpen && (
@@ -139,7 +140,10 @@ export function HoldingsTable({ positions, unknown, onEdit, onDelete, onAddLot }
                       </td>
                       <td className="px-4 py-3 text-right tabular-nums">{fmtShares(p.shares)}</td>
                       <td className="px-4 py-3 text-right tabular-nums">{money(p.avgCost)}</td>
-                      <td className="px-4 py-3 text-right tabular-nums">{money(p.price)}</td>
+                      <td className="px-4 py-3 text-right tabular-nums">
+                        <div>{money(p.price)}</div>
+                        {p.extended && <ExtendedLine move={p.extended} />}
+                      </td>
                       <td className="px-4 py-3 text-right font-medium tabular-nums">{money(p.marketValue)}</td>
                       <td className={`px-4 py-3 text-right tabular-nums ${gainColor(p.gain)}`}>
                         <div className="font-medium">{signedMoney(p.gain)}</div>
@@ -147,6 +151,11 @@ export function HoldingsTable({ positions, unknown, onEdit, onDelete, onAddLot }
                       </td>
                       <td className={`px-4 py-3 text-right tabular-nums ${gainColor(p.dayChange)}`}>
                         {signedMoney(p.dayChange)}
+                        {p.extended && (
+                          <div className={`text-xs ${gainColor(p.extended.valueChange)}`}>
+                            {signedMoney(p.extended.valueChange)}
+                          </div>
+                        )}
                       </td>
                     </tr>
                     {isOpen && (
@@ -238,5 +247,18 @@ function LotList({ position, confirming, setConfirming, onEdit, onDelete, onAddL
         + Add another {position.symbol} purchase
       </Button>
     </>
+  )
+}
+
+function ExtendedLine({ move, withValue = false }: { move: NonNullable<Position['extended']>; withValue?: boolean }) {
+  return (
+    <div className="text-xs whitespace-nowrap" title={`${extendedLabel(move.session)} price vs last close`}>
+      <span className="text-slate-500">{move.session === 'pre' ? 'Pre' : 'AH'} </span>
+      <span className="text-slate-700 dark:text-slate-300">{money(move.price)}</span>{' '}
+      <span className={gainColor(move.change)}>
+        {signedPct(move.changePct)}
+        {withValue ? ` · ${signedMoney(move.valueChange)}` : ''}
+      </span>
+    </div>
   )
 }

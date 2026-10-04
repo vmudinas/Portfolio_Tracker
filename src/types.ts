@@ -57,7 +57,36 @@ export interface Position {
   gain: number | null
   gainPct: number | null
   dayChange: number | null
+  /** Pre-market / after-hours price vs the last regular-session price, when available. */
+  extended: ExtendedMove | null
   lots: Lot[]
+}
+
+export type MarketSession = 'pre' | 'regular' | 'post' | 'closed'
+
+export interface MarketStatus {
+  session: MarketSession
+  /** Holiday name when the exchange is closed for one. */
+  holiday: string | null
+}
+
+/** Last trade outside regular hours. */
+export interface ExtendedQuote {
+  symbol: string
+  price: number
+  session: 'pre' | 'post'
+  /** ISO timestamp of the trade. */
+  updatedAt: string
+}
+
+export interface ExtendedMove {
+  session: 'pre' | 'post'
+  price: number
+  /** Per-share change vs the regular-session price. */
+  change: number
+  changePct: number
+  /** shares × change */
+  valueChange: number
 }
 
 export interface PortfolioSummary {
@@ -66,6 +95,9 @@ export interface PortfolioSummary {
   gain: number
   gainPct: number
   dayChange: number
+  /** Sum of pre-market / after-hours moves for positions that have one. */
+  extendedChange: number | null
+  extendedSession: 'pre' | 'post' | null
   /** Symbols with no quote yet; excluded from value/gain totals. */
   missingQuotes: string[]
 }

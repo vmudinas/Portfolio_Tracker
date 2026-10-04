@@ -30,7 +30,7 @@ async function addLot(user: ReturnType<typeof userEvent.setup>, symbol: string, 
   await user.type(within(dialog).getByLabelText(/price paid/i), price)
   await user.click(within(dialog).getByRole('button', { name: 'Add purchase' }))
   // let the (fake) price fetch settle so React state updates happen inside the test
-  await screen.findByText(/prices updated/i)
+  await screen.findByText(/prices updated|last regular-session prices/i)
 }
 
 describe('App', () => {
@@ -87,5 +87,29 @@ describe('App', () => {
     render(<App providerFactory={factory} />)
     expect(within(screen.getByRole('table')).getByText('AAPL')).toBeInTheDocument()
     await screen.findByText(/prices updated/i)
+  })
+
+  it('shows after-hours moves from the trade stream', async () => {
+    withKey()
+    const user = userEvent.setup()
+    const afterHours: QuoteProvider = {
+      ...fakeProvider,
+      getQuote: async (sym) => ({ ...(await fakeProvider.getQuote(sym))!, updatedAt: '2026-10-02T20:00:00Z' }),
+      getMarketStatus: async () => ({ session: 'post', holiday: null }),
+      streamTrades: (symbols, onTrade) => {
+        const t = setTimeout(
+          () => symbols.forEach((s) => onTrade({ symbol: s, price: prices[s] * 1.1, time: Date.now() })),
+          10,
+        )
+        return () => clearTimeout(t)
+      },
+    }
+    render(<App providerFactory={() => afterHours} />)
+    await addLot(user, 'AAPL', '10', '150')
+    await waitFor(() => expect(screen.getByLabelText('Portfolio summary')).toHaveTextContent('After hours +$200.00'), {
+      timeout: 3000,
+    })
+    expect(within(screen.getByRole('table')).getByText('+10.00%')).toBeInTheDocument()
+    expect(screen.getAllByText('After hours').length).toBeGreaterThan(0) // market badge
   })
 })

@@ -41,3 +41,71 @@ describe('finnhub provider', () => {
     expect(res).toEqual([{ symbol: 'AAPL', description: 'APPLE INC', type: 'Common Stock' }])
   })
 })
+
+describe('market status', () => {
+  it('maps Finnhub sessions', async () => {
+    const status = (body: object) => make(async () => json(body)).getMarketStatus!()
+    expect(await status({ isOpen: false, session: 'pre-market', holiday: null })).toEqual({
+      session: 'pre',
+      holiday: null,
+    })
+    expect(await status({ isOpen: true, session: 'regular', holiday: null })).toEqual({
+      session: 'regular',
+      holiday: null,
+    })
+    expect(await status({ isOpen: false, session: 'post-market', holiday: null })).toEqual({
+      session: 'post',
+      holiday: null,
+    })
+    expect(await status({ isOpen: false, session: null, holiday: 'Christmas' })).toEqual({
+      session: 'closed',
+      holiday: 'Christmas',
+    })
+  })
+})
+
+describe('trade stream', () => {
+  class FakeSocket {
+    static last: FakeSocket
+    readyState = 0
+    sent: string[] = []
+    url: string
+    onopen: (() => void) | null = null
+    onmessage: ((e: { data: string }) => void) | null = null
+    onclose: (() => void) | null = null
+    onerror: (() => void) | null = null
+    constructor(url: string) {
+      this.url = url
+      FakeSocket.last = this
+    }
+    send(m: string) {
+      this.sent.push(m)
+    }
+    close() {
+      this.readyState = 3
+    }
+    open() {
+      this.readyState = 1
+      this.onopen?.()
+    }
+  }
+
+  it('subscribes, forwards trades and unsubscribes', () => {
+    const p = createFinnhubProvider('KEY', { WebSocketImpl: FakeSocket as unknown as typeof WebSocket })
+    const trades: unknown[] = []
+    const stop = p.streamTrades!(['AAPL', 'MSFT'], (t) => trades.push(t))
+    const ws = FakeSocket.last
+    expect(ws.url).toBe('wss://ws.finnhub.io?token=KEY')
+    ws.open()
+    expect(ws.sent).toEqual([
+      JSON.stringify({ type: 'subscribe', symbol: 'AAPL' }),
+      JSON.stringify({ type: 'subscribe', symbol: 'MSFT' }),
+    ])
+    ws.onmessage?.({ data: JSON.stringify({ type: 'ping' }) })
+    ws.onmessage?.({ data: JSON.stringify({ type: 'trade', data: [{ s: 'AAPL', p: 201.5, t: 1000, v: 10 }] }) })
+    expect(trades).toEqual([{ symbol: 'AAPL', price: 201.5, time: 1000 }])
+    stop()
+    expect(ws.sent.at(-1)).toBe(JSON.stringify({ type: 'unsubscribe', symbol: 'MSFT' }))
+    expect(ws.readyState).toBe(3)
+  })
+})

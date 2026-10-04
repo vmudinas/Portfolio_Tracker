@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Lot, Quote } from '../types'
-import { buildPositions, summarize } from './portfolio'
+import { buildPositions, summarize, visibleExtended } from './portfolio'
 
 const lot = (over: Partial<Lot>): Lot => ({
   id: crypto.randomUUID(),
@@ -61,5 +61,27 @@ describe('summarize', () => {
     expect(s.gain).toBe(0)
     expect(s.dayChange).toBe(0)
     expect(s.missingQuotes).toEqual(['XYZ'])
+  })
+})
+
+describe('extended hours', () => {
+  const q = { ...quote('AAPL', 200, 2), updatedAt: '2026-10-02T20:00:00Z' }
+  const ext = { symbol: 'AAPL', price: 210, session: 'post' as const, updatedAt: '2026-10-02T22:00:00Z' }
+
+  it('shows newer after-hours trades outside the regular session only', () => {
+    expect(visibleExtended({ AAPL: ext }, { AAPL: q }, 'post')).toEqual({ AAPL: ext })
+    expect(visibleExtended({ AAPL: ext }, { AAPL: q }, 'closed')).toEqual({ AAPL: ext })
+    expect(visibleExtended({ AAPL: ext }, { AAPL: q }, 'regular')).toEqual({})
+    const stale = { ...ext, updatedAt: '2026-10-02T15:00:00Z' }
+    expect(visibleExtended({ AAPL: stale }, { AAPL: q }, 'post')).toEqual({})
+  })
+
+  it('computes the move vs the regular-session price and totals it', () => {
+    const positions = buildPositions([lot({ shares: 10 })], { AAPL: q }, { AAPL: ext })
+    expect(positions[0].extended).toEqual({ session: 'post', price: 210, change: 10, changePct: 5, valueChange: 100 })
+    const s = summarize(positions)
+    expect(s.extendedChange).toBe(100)
+    expect(s.extendedSession).toBe('post')
+    expect(summarize(buildPositions([lot({})], { AAPL: q })).extendedChange).toBeNull()
   })
 })
