@@ -4,6 +4,7 @@ import type { Theme } from '../hooks/useTheme'
 import { activeProfile } from '../state/reducer'
 import { DEFAULT_RISK_FREE } from '../lib/storage'
 import type { AppState, Book, Settings } from '../types'
+import { LoginSettings } from './auth/LoginSettings'
 import { Button, Field, inputClass, Modal } from './ui'
 
 interface Props {
@@ -194,6 +195,8 @@ export function SettingsDialog({
             Save
           </Button>
         </div>
+
+        <LoginSettings />
 
         <hr className="border-slate-200 dark:border-slate-800" />
 

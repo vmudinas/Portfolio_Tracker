@@ -210,3 +210,12 @@ No secrets are needed — there is no server and no committed API key.
 - The "Portfolios" tab is now **All funds (n)**, placed right after Holdings and also reachable from the profile menu.
 - While it is open, the summary cards show totals across every fund (value/AUM, cash, unrealized, today, realized, dividends, total return); the fund table adds each fund's % of the combined value.
 - The section tabs now sit directly under the summary, and the single-fund charts panel only shows on the Holdings tab, so the other tabs are no longer pushed below the charts.
+
+## 7h. Login / home page (added 2026-10-05)
+
+- A home page (intro + login card) gates the whole app; the app bundle and portfolio data load only after logging in.
+- First visit: "Create your login" with username prefilled as `admin`; the user picks the PIN (4–12 digits). No default PIN is in the source, since the repo is public.
+- Stored in localStorage as PBKDF2-SHA256 (210k iterations, random 16-byte salt); the PIN itself is never stored.
+- Session in sessionStorage: survives reloads, ends when the tab closes, after 15 minutes without activity, or on Lock.
+- 5 free attempts, then 30 s, 60 s, 120 s… between tries. "Forgot your PIN?" can only erase this browser's data (then restore a backup).
+- Limits: this is a lock screen for a client-only app, not encryption — someone with access to the browser's developer tools could still read the stored data. Encrypting the data with the PIN is a possible follow-up.
