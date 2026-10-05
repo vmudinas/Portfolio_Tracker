@@ -345,7 +345,7 @@ describe('App', () => {
     localStorage.setItem('portfolio-tracker:v1', JSON.stringify(st))
     const user = userEvent.setup()
     render(<App providerFactory={factory} />)
-    await user.click(screen.getByRole('tab', { name: 'Portfolios' }))
+    await user.click(screen.getByRole('tab', { name: 'All funds (2)' }))
     const table = await screen.findByRole('table', { name: 'Portfolio totals' }, { timeout: 5000 })
     // Growth: 10 × $200 = $2,000. Income: 2 × $300 + $100 cash = $700 (MSFT priced once the tab loads its quote).
     await waitFor(() => expect(within(table).getByText('$700.00')).toBeInTheDocument())
@@ -356,10 +356,21 @@ describe('App', () => {
     ).toHaveTextContent('$2,000.00')
     const combinedRow = within(table).getByText('Combined (2)').closest('tr')!
     expect(combinedRow).toHaveTextContent('$2,700.00')
+    // The summary cards switch to the total across every fund (AUM).
+    const cards = screen.getByRole('region', { name: 'All funds summary' })
+    expect(cards).toHaveTextContent('$2,700.00')
+    expect(cards).toHaveTextContent('Cash $100.00')
+    expect(screen.getByRole('heading', { name: 'All funds (2)' })).toBeInTheDocument()
     await user.click(within(table).getByRole('checkbox', { name: 'Include Income' }))
     expect(within(table).getByText('Combined (1)').closest('tr')!).toHaveTextContent('$2,000.00')
     await user.click(within(table).getByRole('button', { name: /Income/ }))
     expect(screen.getByRole('tab', { name: /Holdings/ })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByRole('region', { name: 'Portfolio summary' })).toHaveTextContent('$700.00')
+    // The profile menu opens the overview too.
+    await user.selectOptions(screen.getByLabelText('Profile'), 'All funds (2)')
+    expect(screen.getByRole('tab', { name: 'All funds (2)' })).toHaveAttribute('aria-selected', 'true')
+    await user.selectOptions(screen.getByLabelText('Profile'), 'Growth')
+    expect(screen.getByRole('region', { name: 'Portfolio summary' })).toHaveTextContent('$2,000.00')
   })
 
   it('shows the market heat map and top 20 gainers/losers among large caps', async () => {

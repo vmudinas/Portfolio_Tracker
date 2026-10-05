@@ -16,7 +16,7 @@ Enter a stock symbol, how many shares you bought, and the price you paid. Portfo
 - **Charts** (optional) — allocation donut (by stock or industry), portfolio performance vs the S&P 500 (time-weighted), and stock comparison
 - **Select & compare** — tick several holdings for their combined value, cost, gain, today’s move, realized gain and dividends; jump to a comparison chart
 - **Returns & Sharpe** — 1-day, 2-week, YTD, 1-year, 2- and 3-year (annualized), inception-to-date (and annualized), Sharpe ratio over 1 and 3 years, for the whole portfolio, your selection, each holding and the S&P 500; month-by-month returns for every year
-- **Portfolios tab** — compare all your portfolios (profiles) side by side: value, cost, gains, dividends, 1D/2W/YTD/1Y/2Y/3Y/ITD, Sharpe, growth chart vs the S&P 500 (1D, 2W, 1Y, 3Y, 5Y, All), and a combined total of any you tick
+- **All funds tab** (also in the profile menu) — total value (AUM) across every fund in the summary cards, and all your funds (profiles) compared side by side with each one's share of the total: value, cost, gains, dividends, 1D/2W/YTD/1Y/2Y/3Y/ITD, Sharpe, growth chart vs the S&P 500 (1D, 2W, 1Y, 3Y, 5Y, All), and a combined total of any you tick
 - **Heat map** — the ~100 largest US companies sized by market cap, grouped by sector, coloured by today’s move
 - **Top movers** — top 20 gainers and losers among large caps, or across the whole US market (free Alpha Vantage key)
 - **Watchlist & price alerts** — follow stocks you don’t own; get a browser notification when a price crosses your target (while the site is open)

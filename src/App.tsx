@@ -23,7 +23,7 @@ import { useMarketStatus } from './hooks/useMarketStatus'
 import { useQuotes } from './hooks/useQuotes'
 import { useTheme } from './hooks/useTheme'
 import { money } from './lib/format'
-import { analyze, visibleExtended } from './lib/portfolio'
+import { analyze, combineSummaries, visibleExtended } from './lib/portfolio'
 import { DEFAULT_RISK_FREE, defaultState, parseDividend, parseLot, parseSale } from './lib/storage'
 import { createFinnhubProvider } from './providers/finnhub'
 import type { HistoryProvider } from './providers/HistoryProvider'
@@ -99,10 +99,27 @@ function App({ providerFactory = createFinnhubProvider, historyFactory = createT
     () => analyze(book, quotes, extended, { cash: profile.cash }),
     [book, quotes, extended, profile.cash],
   )
+  // "All funds" tab: totals across every profile (AUM), shown in the summary cards.
+  const allFunds = tab === 'portfolios'
+  const allSummary = useMemo(
+    () =>
+      allFunds
+        ? combineSummaries(
+            state.profiles.map(
+              (p) =>
+                analyze({ lots: p.lots, sales: p.sales, dividends: p.dividends }, quotes, extended, { cash: p.cash })
+                  .summary,
+            ),
+          )
+        : null,
+    [allFunds, state.profiles, quotes, extended],
+  )
+  const shown = allSummary ?? summary
   // Only keep selections that are still open positions in this profile.
   const selected = selectedRaw.filter((s) => positions.some((p) => p.symbol === s))
   const openCharts = (view: ChartRequest['view'], symbols?: string[]) => {
     setChartRequest({ id: Date.now(), view, symbols })
+    setTab('holdings')
     if (!showCharts) dispatch({ type: 'settings/update', settings: { showTrends: true } })
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
@@ -171,6 +188,8 @@ function App({ providerFactory = createFinnhubProvider, historyFactory = createT
   }
 
   const hasActivity = profile.lots.length + profile.sales.length + profile.dividends.length > 0
+  const anyActivity = state.profiles.some((p) => p.lots.length + p.sales.length + p.dividends.length > 0)
+  const showSummary = allFunds ? anyActivity : hasActivity
   const watchCount = profile.watchlist.length + profile.alerts.filter((a) => !a.triggeredAt).length
 
   return (
@@ -184,7 +203,12 @@ function App({ providerFactory = createFinnhubProvider, historyFactory = createT
           <ProfileSwitcher
             profiles={state.profiles}
             activeId={profile.id}
-            onSwitch={(id) => dispatch({ type: 'profile/switch', id })}
+            onSwitch={(id) => {
+              dispatch({ type: 'profile/switch', id })
+              if (allFunds) setTab('holdings')
+            }}
+            allFunds={allFunds}
+            onAllFunds={() => setTab('portfolios')}
             onAdd={(name) => dispatch({ type: 'profile/add', name })}
             onRename={(id, name) => dispatch({ type: 'profile/rename', id, name })}
             onDelete={(id) => dispatch({ type: 'profile/delete', id })}
@@ -248,9 +272,31 @@ function App({ providerFactory = createFinnhubProvider, historyFactory = createT
           </div>
         ))}
 
-        {hasActivity && (
+        {showSummary && (
           <>
-            <SummaryCards summary={summary} onEditCash={() => setCashOpen(true)} />
+            {state.profiles.length > 1 && (
+              <div className="flex flex-wrap items-baseline justify-between gap-2">
+                <h2 className="text-lg font-semibold">
+                  {allFunds ? `All funds (${state.profiles.length})` : profile.name}
+                </h2>
+                {allFunds ? (
+                  <span className="text-xs text-slate-500">Totals across every fund</span>
+                ) : (
+                  <button
+                    type="button"
+                    className="text-sm font-medium text-teal-700 hover:underline dark:text-teal-400"
+                    onClick={() => setTab('portfolios')}
+                  >
+                    All funds overview →
+                  </button>
+                )}
+              </div>
+            )}
+            <SummaryCards
+              summary={shown}
+              label={allFunds ? 'All funds summary' : 'Portfolio summary'}
+              onEditCash={allFunds ? undefined : () => setCashOpen(true)}
+            />
             <div className="flex flex-wrap items-center justify-between gap-2">
               <p className="flex flex-wrap items-center gap-2 text-xs text-slate-500" aria-live="polite">
                 <MarketBadge status={market} />
@@ -263,24 +309,49 @@ function App({ providerFactory = createFinnhubProvider, historyFactory = createT
                     : apiKey
                       ? 'Loading prices…'
                       : 'Prices not loaded'}
-                {summary.missingQuotes.length > 0 && !loading && ` · no price for ${summary.missingQuotes.join(', ')}`}
+                {shown.missingQuotes.length > 0 && !loading && ` · no price for ${shown.missingQuotes.join(', ')}`}
               </p>
               <div className="flex flex-wrap gap-2">
-                <Button
-                  aria-pressed={showCharts}
-                  onClick={() => dispatch({ type: 'settings/update', settings: { showTrends: !showCharts } })}
-                >
-                  {showCharts ? 'Hide charts' : '📈 Charts'}
-                </Button>
+                {tab === 'holdings' && (
+                  <Button
+                    aria-pressed={showCharts}
+                    onClick={() => dispatch({ type: 'settings/update', settings: { showTrends: !showCharts } })}
+                  >
+                    {showCharts ? 'Hide charts' : '📈 Charts'}
+                  </Button>
+                )}
                 <Button onClick={refresh} disabled={!provider || loading}>
                   ↻ Refresh
                 </Button>
-                <Button variant="primary" onClick={() => setEditing({ kind: 'buy' })}>
-                  + Add transaction
-                </Button>
+                {!allFunds && (
+                  <Button variant="primary" onClick={() => setEditing({ kind: 'buy' })}>
+                    + Add transaction
+                  </Button>
+                )}
               </div>
             </div>
-            {showCharts && (
+          </>
+        )}
+
+        {
+          <>
+            <Tabs
+              label="Sections"
+              value={tab}
+              onChange={setTab}
+              tabs={[
+                { id: 'holdings', label: `Holdings (${positions.length})` },
+                {
+                  id: 'portfolios',
+                  label: state.profiles.length > 1 ? `All funds (${state.profiles.length})` : 'All funds',
+                },
+                { id: 'activity', label: 'Activity' },
+                { id: 'watchlist', label: `Watchlist & alerts${watchCount ? ` (${watchCount})` : ''}` },
+                { id: 'heatmap', label: 'Heat map' },
+                { id: 'movers', label: 'Top movers' },
+              ]}
+            />
+            {tab === 'holdings' && hasActivity && showCharts && (
               <Suspense fallback={<p className="text-sm text-slate-500">Loading charts…</p>}>
                 <ChartsPanel
                   positions={positions}
@@ -298,24 +369,6 @@ function App({ providerFactory = createFinnhubProvider, historyFactory = createT
                 />
               </Suspense>
             )}
-          </>
-        )}
-
-        {
-          <>
-            <Tabs
-              label="Sections"
-              value={tab}
-              onChange={setTab}
-              tabs={[
-                { id: 'holdings', label: `Holdings (${positions.length})` },
-                { id: 'activity', label: 'Activity' },
-                { id: 'watchlist', label: `Watchlist & alerts${watchCount ? ` (${watchCount})` : ''}` },
-                { id: 'portfolios', label: 'Portfolios' },
-                { id: 'heatmap', label: 'Heat map' },
-                { id: 'movers', label: 'Top movers' },
-              ]}
-            />
             {tab === 'holdings' && !hasActivity && (
               <EmptyState
                 onAdd={() => setEditing({ kind: 'buy' })}

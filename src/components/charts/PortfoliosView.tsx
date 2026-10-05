@@ -229,18 +229,21 @@ export default function PortfoliosView(props: Props) {
     <div className="space-y-4">
       <Card className="overflow-hidden">
         <div className="flex flex-wrap items-center justify-between gap-2 px-4 pt-3">
-          <h2 className="font-semibold">Your portfolios</h2>
+          <h2 className="font-semibold">Funds</h2>
           <p className="text-xs text-slate-500">
-            Tick portfolios to include in the combined total. Click a name to open it.
+            Tick funds to include in the combined total and charts. Click a name to open it.
           </p>
         </div>
         <div className="overflow-x-auto">
-          <table className="mt-2 w-full min-w-[820px] text-sm" aria-label="Portfolio totals">
+          <table className="mt-2 w-full min-w-[900px] text-sm" aria-label="Portfolio totals">
             <thead className="bg-slate-50 text-xs text-slate-500 uppercase dark:bg-slate-800/50">
               <tr>
                 <th className="w-10 py-2 pl-4" />
-                <th className="py-2 text-left font-medium">Portfolio</th>
+                <th className="py-2 text-left font-medium">Fund</th>
                 <th className="py-2 text-right font-medium">Value</th>
+                <th className="py-2 text-right font-medium" title="Share of the combined value">
+                  % of total
+                </th>
                 <th className="py-2 text-right font-medium">Cost</th>
                 <th className="py-2 text-right font-medium">Unrealized</th>
                 <th className="py-2 text-right font-medium">Today</th>
@@ -275,6 +278,11 @@ export default function PortfoliosView(props: Props) {
                     </span>
                   </td>
                   <td className="py-2 text-right font-medium">{money(s.totalValue)}</td>
+                  <td className="py-2 text-right text-slate-500">
+                    {included.includes(p.id) && combined.totalValue > 0
+                      ? `${((s.totalValue / combined.totalValue) * 100).toFixed(1)}%`
+                      : '—'}
+                  </td>
                   <td className="py-2 text-right">{money(s.costBasis)}</td>
                   <td className={`py-2 text-right ${gainColor(s.gain)}`}>
                     {signedMoney(s.gain)} <span className="text-xs">{signedPct(s.gainPct)}</span>
@@ -291,6 +299,7 @@ export default function PortfoliosView(props: Props) {
                 <td />
                 <td className="py-2">Combined ({inc.length})</td>
                 <td className="py-2 text-right">{money(combined.totalValue)}</td>
+                <td className="py-2 text-right text-slate-500">{combined.totalValue > 0 ? '100%' : '—'}</td>
                 <td className="py-2 text-right">{money(combined.costBasis)}</td>
                 <td className={`py-2 text-right ${gainColor(combined.gain)}`}>
                   {signedMoney(combined.gain)} <span className="text-xs">{signedPct(combined.gainPct)}</span>
@@ -313,7 +322,7 @@ export default function PortfoliosView(props: Props) {
         </div>
         {profiles.length < 2 && (
           <p className="px-4 pb-3 text-xs text-slate-500">
-            You have one portfolio. Create more from the profile menu (top right) to compare them here.
+            You have one fund. Add more with “+ New profile…” in the menu at the top to compare them here.
           </p>
         )}
       </Card>

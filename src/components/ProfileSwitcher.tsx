@@ -9,11 +9,15 @@ interface Props {
   onAdd: (name: string) => void
   onRename: (id: string, name: string) => void
   onDelete: (id: string) => void
+  /** True while the all-funds overview is open. */
+  allFunds?: boolean
+  onAllFunds?: () => void
 }
 
 type Mode = { kind: 'add' } | { kind: 'rename' } | { kind: 'delete' } | null
 
-export function ProfileSwitcher({ profiles, activeId, onSwitch, onAdd, onRename, onDelete }: Props) {
+export function ProfileSwitcher(props: Props) {
+  const { profiles, activeId, onSwitch, onAdd, onRename, onDelete, allFunds = false, onAllFunds } = props
   const active = profiles.find((p) => p.id === activeId) ?? profiles[0]
   const [mode, setMode] = useState<Mode>(null)
   const [name, setName] = useState('')
@@ -40,9 +44,15 @@ export function ProfileSwitcher({ profiles, activeId, onSwitch, onAdd, onRename,
       <select
         id="profile-select"
         className={`${inputClass} w-auto max-w-[11rem] py-1.5 font-medium`}
-        value={active.id}
-        onChange={(e) => (e.target.value === '__new' ? open({ kind: 'add' }) : onSwitch(e.target.value))}
+        value={allFunds ? '__all' : active.id}
+        onChange={(e) => {
+          const v = e.target.value
+          if (v === '__new') open({ kind: 'add' })
+          else if (v === '__all') onAllFunds?.()
+          else onSwitch(v)
+        }}
       >
+        {onAllFunds && profiles.length > 1 && <option value="__all">All funds ({profiles.length})</option>}
         {profiles.map((p) => (
           <option key={p.id} value={p.id}>
             {p.name}
@@ -50,16 +60,18 @@ export function ProfileSwitcher({ profiles, activeId, onSwitch, onAdd, onRename,
         ))}
         <option value="__new">+ New profile…</option>
       </select>
-      <Button
-        variant="ghost"
-        className="px-2"
-        aria-label="Rename profile"
-        title="Rename profile"
-        onClick={() => open({ kind: 'rename' })}
-      >
-        ✎
-      </Button>
-      {profiles.length > 1 && (
+      {!allFunds && (
+        <Button
+          variant="ghost"
+          className="px-2"
+          aria-label="Rename profile"
+          title="Rename profile"
+          onClick={() => open({ kind: 'rename' })}
+        >
+          ✎
+        </Button>
+      )}
+      {!allFunds && profiles.length > 1 && (
         <Button
           variant="ghost"
           className="px-2"
