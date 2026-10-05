@@ -384,6 +384,8 @@ describe('App', () => {
     render(<App providerFactory={factory} />)
     // A cash-only fund still shows its summary, so the cash can be seen and edited.
     expect(screen.getByRole('region', { name: 'Portfolio summary' })).toHaveTextContent('$1,500.00')
+    // No holdings to chart, so no inert Charts toggle.
+    expect(screen.queryByRole('button', { name: /Charts/ })).not.toBeInTheDocument()
     await user.click(screen.getByRole('tab', { name: 'All funds (2)' }))
     expect(screen.getByRole('region', { name: 'All funds summary' })).toHaveTextContent('$2,000.00')
   })

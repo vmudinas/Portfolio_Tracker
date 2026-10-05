@@ -25,8 +25,10 @@ self.addEventListener('fetch', (event) => {
   if (req.method !== 'GET' || url.origin !== self.location.origin) return
 
   if (req.mode === 'navigate') {
+    // 'no-cache' revalidates with the server, so a new deploy shows up on the next reload instead of
+    // after GitHub Pages' 10-minute HTTP cache on index.html expires.
     event.respondWith(
-      fetch(req)
+      fetch(req, { cache: 'no-cache' })
         .then((res) => {
           const copy = res.clone()
           caches.open(CACHE).then((c) => c.put('./index.html', copy))

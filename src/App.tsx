@@ -313,7 +313,7 @@ function App({ providerFactory = createFinnhubProvider, historyFactory = createT
                 {shown.missingQuotes.length > 0 && !loading && ` · no price for ${shown.missingQuotes.join(', ')}`}
               </p>
               <div className="flex flex-wrap gap-2">
-                {tab === 'holdings' && (
+                {tab === 'holdings' && hasActivity && (
                   <Button
                     aria-pressed={showCharts}
                     onClick={() => dispatch({ type: 'settings/update', settings: { showTrends: !showCharts } })}
