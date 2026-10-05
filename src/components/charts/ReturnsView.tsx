@@ -6,14 +6,15 @@ import {
   fundMonthlyReturns,
   portfolioMonthlyReturns,
   returnStats,
-  SHARPE_YEARS,
   yearGrid,
   type MonthReturn,
   type ReturnStats,
 } from '../../lib/returns'
 import type { HistoryProvider } from '../../providers/HistoryProvider'
-import type { Book } from '../../types'
+import { holdingOneDay, holdingTwoWeek, portfolioOneDay, portfolioTwoWeek } from '../../lib/shortTerm'
+import type { Book, Quote } from '../../types'
 import { ChartMessage } from './common'
+import { StatsCells, StatsHeader } from './StatsColumns'
 import { BENCHMARK } from './PerformanceView'
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
@@ -26,6 +27,7 @@ interface Props {
   held: string[]
   selected: string[]
   latestPrices: Record<string, number | undefined>
+  quotes: Record<string, Quote | undefined>
   riskFree: number
   provider: HistoryProvider
 }
@@ -36,12 +38,13 @@ interface Row {
   sub?: string
   returns: MonthReturn[]
   stats: ReturnStats
+  oneDay: number | null
+  twoWeek: number | null
   benchmark?: boolean
 }
 
 const pct = (v: number | null | undefined, digits = 1) =>
   v === null || v === undefined ? '—' : `${v > 0 ? '+' : v < 0 ? '−' : ''}${Math.abs(v * 100).toFixed(digits)}%`
-const num = (v: number | null) => (v === null ? '—' : v.toFixed(2))
 
 /** Background tint for a monthly return: stronger with size, capped at ±10%. Text always shows the value. */
 function tint(r: number) {
@@ -49,10 +52,12 @@ function tint(r: number) {
   return r >= 0 ? `rgba(16, 185, 129, ${a})` : `rgba(244, 63, 94, ${a})`
 }
 
-export default function ReturnsView({ book, held, selected, latestPrices, riskFree, provider }: Props) {
+export default function ReturnsView({ book, held, selected, latestPrices, quotes, riskFree, provider }: Props) {
   const everHeld = useMemo(() => [...new Set(book.lots.map((l) => l.symbol))], [book.lots])
   const symbols = useMemo(() => [...new Set([...everHeld, BENCHMARK])].sort(), [everHeld])
   const { histories, loading, error } = useHistory(symbols, provider, '1month', 240)
+  // Daily closes for the 2-week column (shared cache with the Performance and Compare charts).
+  const daily = useHistory(symbols, provider, '1day', 260).histories
   const [subject, setSubject] = useState<string>(PORTFOLIO)
   const [showBench, setShowBench] = useState(true)
   const [today] = useState(() => new Date())
@@ -67,6 +72,8 @@ export default function ReturnsView({ book, held, selected, latestPrices, riskFr
         sub: port.missing.length ? `without ${port.missing.join(', ')}` : 'time-weighted',
         returns: port.returns,
         stats: returnStats(port.returns, riskFree, today),
+        oneDay: portfolioOneDay(book, quotes),
+        twoWeek: portfolioTwoWeek(book, daily, today),
       })
     }
     if (selected.length > 1) {
@@ -78,6 +85,8 @@ export default function ReturnsView({ book, held, selected, latestPrices, riskFr
           sub: selected.join(', '),
           returns: sel.returns,
           stats: returnStats(sel.returns, riskFree, today),
+          oneDay: portfolioOneDay(filterBook(book, selected), quotes),
+          twoWeek: portfolioTwoWeek(filterBook(book, selected), daily, today),
         })
     }
     const order = [...held, ...everHeld.filter((s) => !held.includes(s)).sort()]
@@ -94,6 +103,8 @@ export default function ReturnsView({ book, held, selected, latestPrices, riskFr
         label: s,
         sub: held.includes(s) ? undefined : 'sold',
         returns: rets,
+        oneDay: holdingOneDay(quotes[s]),
+        twoWeek: holdingTwoWeek(daily[s], latestPrices[s], today),
         stats: returnStats(
           rets,
           riskFree,
@@ -115,12 +126,14 @@ export default function ReturnsView({ book, held, selected, latestPrices, riskFr
         label: 'S&P 500 (SPY)',
         sub: 'benchmark',
         returns: rets,
+        oneDay: holdingOneDay(quotes[BENCHMARK]),
+        twoWeek: holdingTwoWeek(daily[BENCHMARK], latestPrices[BENCHMARK], today),
         stats: { ...stats, itd: itdStats.itd, itdAnnualized: itdStats.itdAnnualized, inception: itdStats.inception },
         benchmark: true,
       })
     }
     return out
-  }, [book, histories, latestPrices, riskFree, selected, held, everHeld, today])
+  }, [book, histories, daily, quotes, latestPrices, riskFree, selected, held, everHeld, today])
 
   const current = rows.find((r) => r.id === subject) ?? rows[0]
   const grid = current ? yearGrid(current.returns) : []
@@ -143,31 +156,11 @@ export default function ReturnsView({ book, held, selected, latestPrices, riskFr
     <div className="space-y-6">
       <section aria-label="Return statistics">
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[720px] text-sm">
+          <table className="w-full min-w-[900px] text-sm">
             <thead className="text-xs text-slate-500">
               <tr className="border-b border-slate-200 dark:border-slate-800">
                 <th className="py-2 pr-3 text-left font-medium">Click a row for its monthly returns</th>
-                <th className="px-2 py-2 text-right font-medium" title="Year to date">
-                  YTD
-                </th>
-                <th className="px-2 py-2 text-right font-medium" title="Last 12 full months">
-                  1Y
-                </th>
-                <th className="px-2 py-2 text-right font-medium" title="Inception to date — since your first purchase">
-                  ITD
-                </th>
-                <th className="px-2 py-2 text-right font-medium" title="ITD, annualized">
-                  ITD / yr
-                </th>
-                {SHARPE_YEARS.map((y) => (
-                  <th
-                    key={y}
-                    className="px-2 py-2 text-right font-medium"
-                    title={`Sharpe ratio over the last ${y * 12} full months`}
-                  >
-                    Sharpe {y}Y
-                  </th>
-                ))}
+                <StatsHeader />
               </tr>
             </thead>
             <tbody className="tabular-nums">
@@ -186,22 +179,7 @@ export default function ReturnsView({ book, held, selected, latestPrices, riskFr
                       </button>
                       {r.sub && <span className="ml-2 text-xs text-slate-500">{r.sub}</span>}
                     </td>
-                    <td className={`px-2 py-2 text-right ${gainColor(r.stats.ytd)}`}>{pct(r.stats.ytd)}</td>
-                    <td className={`px-2 py-2 text-right ${gainColor(r.stats.oneYear)}`}>{pct(r.stats.oneYear)}</td>
-                    <td
-                      className={`px-2 py-2 text-right ${gainColor(r.stats.itd)}`}
-                      title={r.stats.inception ? `Since ${r.stats.inception}` : undefined}
-                    >
-                      {pct(r.stats.itd)}
-                    </td>
-                    <td className={`px-2 py-2 text-right ${gainColor(r.stats.itdAnnualized)}`}>
-                      {pct(r.stats.itdAnnualized)}
-                    </td>
-                    {SHARPE_YEARS.map((y) => (
-                      <td key={y} className="px-2 py-2 text-right">
-                        {num(r.stats.sharpe[y])}
-                      </td>
-                    ))}
+                    <StatsCells r={r} />
                   </tr>
                 )
               })}
@@ -211,8 +189,9 @@ export default function ReturnsView({ book, held, selected, latestPrices, riskFr
         <p className="mt-2 text-xs text-slate-500">
           Price returns from monthly closes (dividends not included). Portfolio rows are time-weighted (Modified Dietz),
           so buying or selling doesn’t count as gain or loss; cash is excluded. Holding ITD is from your first purchase
-          price. Sharpe = annualized excess return ÷ volatility of monthly returns, risk-free {riskFree}% — shown only
-          when that many full months exist; 1Y/2Y use few data points.
+          price. 1D is today vs the previous close; 2W uses daily closes. 2Y and 3Y are annualized. Sharpe = annualized
+          excess return ÷ volatility of monthly returns, risk-free {riskFree}% — shown only when that many full months
+          exist.
           {loading.length > 0 && ` Loading ${loading.length} more…`}
           {error && <span className="text-rose-600"> {error}</span>}
         </p>

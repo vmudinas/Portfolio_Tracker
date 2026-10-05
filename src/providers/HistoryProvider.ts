@@ -1,10 +1,10 @@
 export interface PricePoint {
-  /** YYYY-MM-DD */
+  /** YYYY-MM-DD, or "YYYY-MM-DD HH:MM:SS" (exchange time) for intraday bars */
   date: string
   close: number
 }
 
-export type HistoryInterval = '1day' | '1week' | '1month'
+export type HistoryInterval = '5min' | '1day' | '1week' | '1month'
 
 /** Daily/weekly closing prices for charts. */
 export interface HistoryProvider {

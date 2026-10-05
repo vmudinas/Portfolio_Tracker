@@ -74,11 +74,13 @@ function App({ providerFactory = createFinnhubProvider, historyFactory = createT
           ...profile.lots.map((l) => l.symbol),
           ...profile.watchlist,
           ...profile.alerts.filter((a) => !a.triggeredAt).map((a) => a.symbol),
+          // S&P 500 benchmark (1D change in return tables and the 1D chart baseline).
+          ...(provider && (showCharts || tab === 'portfolios') ? ['SPY'] : []),
           // The Portfolios tab values every profile, so it needs their prices too.
           ...(tab === 'portfolios' ? state.profiles.flatMap((p) => p.lots.map((l) => l.symbol)) : []),
         ]),
       ].sort(),
-    [profile.lots, profile.watchlist, profile.alerts, tab, state.profiles],
+    [profile.lots, profile.watchlist, profile.alerts, tab, state.profiles, provider, showCharts],
   )
   const market = useMarketStatus(provider)
   const session = market?.session ?? null
@@ -289,6 +291,7 @@ function App({ providerFactory = createFinnhubProvider, historyFactory = createT
                   quoteProvider={provider}
                   selected={selected}
                   latestPrices={regularPrices}
+                  quotes={quotes}
                   riskFree={state.settings.riskFreeRate ?? DEFAULT_RISK_FREE}
                   request={chartRequest}
                   onOpenSettings={() => setSettingsOpen(true)}

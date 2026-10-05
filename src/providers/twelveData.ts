@@ -48,7 +48,10 @@ export function createTwelveDataProvider(apiKey: string, opts: Options = {}): Hi
         throw new ProviderError('http', data.message ?? 'Twelve Data error.')
       }
       return (data.values ?? [])
-        .map((v) => ({ date: v.datetime.slice(0, 10), close: Number(v.close) }))
+        .map((v) => ({
+          date: interval === '5min' ? v.datetime.slice(0, 19) : v.datetime.slice(0, 10),
+          close: Number(v.close),
+        }))
         .filter((p) => Number.isFinite(p.close))
     },
   }

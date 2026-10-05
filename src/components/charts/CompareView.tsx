@@ -38,12 +38,15 @@ export default function CompareView({
   symbols,
   provider,
   preselect,
+  prevCloses = {},
 }: {
   symbols: string[]
   provider: HistoryProvider
+  prevCloses?: Record<string, number | undefined>
   /** Start with exactly these stocks selected (from "Compare selected"). */
   preselect?: string[]
 }) {
+  const [today] = useState(() => new Date())
   const [prefs, setPrefs] = useState<Prefs>(() => {
     const p = readPrefs()
     return preselect?.length
@@ -71,7 +74,7 @@ export default function CompareView({
   const fetchKey = (withBench ? [...selected, BENCHMARK] : selected).join(',')
   const fetchList = fetchKey ? fetchKey.split(',') : []
   const { histories, loading, error } = useHistory(fetchList, provider, spec.interval, spec.points)
-  const { rows, stats } = buildTrendRows(histories, fetchList, prefs.range, mode)
+  const { rows, stats } = buildTrendRows(histories, fetchList, prefs.range, mode, today, prevCloses)
 
   const toggle = (symbol: string) =>
     setPrefs((p) => {

@@ -3,7 +3,7 @@ import { CartesianGrid, Line, LineChart, ReferenceLine, ResponsiveContainer, Too
 import { useHistory } from '../../hooks/useHistory'
 import { gainColor, money, signedPct } from '../../lib/format'
 import { buildPerformance } from '../../lib/performance'
-import { rangeSpec, type RangeId } from '../../lib/trends'
+import { oneDaySeries, rangeSpec, type RangeId } from '../../lib/trends'
 import type { HistoryProvider } from '../../providers/HistoryProvider'
 import type { Book } from '../../types'
 import { Segmented } from '../ui'
@@ -26,17 +26,29 @@ const compactMoney = (v: number) =>
       ? `$${(v / 1e3).toFixed(0)}k`
       : `$${v.toFixed(0)}`
 
-export default function PerformanceView({ book, provider }: { book: Book; provider: HistoryProvider }) {
+export default function PerformanceView({
+  book,
+  provider,
+  prevCloses = {},
+}: {
+  book: Book
+  provider: HistoryProvider
+  /** Previous closes from live quotes — the 1D chart starts from these. */
+  prevCloses?: Record<string, number | undefined>
+}) {
   const [range, setRange] = useState<RangeId>('1Y')
   const [mode, setMode] = useState<'return' | 'value'>('return')
   const spec = rangeSpec(range)
   const symbols = useMemo(() => [...new Set([...book.lots.map((l) => l.symbol), BENCHMARK])].sort(), [book.lots])
   const { histories, loading, error } = useHistory(symbols, provider, spec.interval, spec.points)
 
-  const { rows, missing } = useMemo(
-    () => buildPerformance(book, histories, histories[BENCHMARK], cutoff(spec.days)),
-    [book, histories, spec.days],
-  )
+  const { rows, missing } = useMemo(() => {
+    if (range === '1D') {
+      const one = oneDaySeries(histories, prevCloses)
+      return buildPerformance(book, one.histories, one.histories[BENCHMARK], one.day ?? cutoff(1))
+    }
+    return buildPerformance(book, histories, histories[BENCHMARK], cutoff(spec.days))
+  }, [book, histories, spec.days, range, prevCloses])
   const last = rows.at(-1)
   const label = (k: string) =>
     k === 'portfolioPct'

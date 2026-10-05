@@ -1,9 +1,12 @@
 import type { HistoryInterval, PricePoint } from '../providers/HistoryProvider'
 
-export type RangeId = '1M' | '3M' | '6M' | '1Y' | '5Y'
+export type RangeId = '1D' | '2W' | '1M' | '3M' | '6M' | '1Y' | '5Y'
 export type TrendMode = 'percent' | 'price'
 
 export const RANGES: { id: RangeId; days: number; interval: HistoryInterval; points: number }[] = [
+  // 1D = the latest trading session in 5-minute bars, measured from the previous close.
+  { id: '1D', days: 1, interval: '5min', points: 80 },
+  { id: '2W', days: 14, interval: '1day', points: 260 },
   { id: '1M', days: 31, interval: '1day', points: 260 },
   { id: '3M', days: 92, interval: '1day', points: 260 },
   { id: '6M', days: 183, interval: '1day', points: 260 },
@@ -11,7 +14,7 @@ export const RANGES: { id: RangeId; days: number; interval: HistoryInterval; poi
   { id: '5Y', days: 5 * 366, interval: '1week', points: 265 },
 ]
 
-export const rangeSpec = (id: RangeId) => RANGES.find((r) => r.id === id) ?? RANGES[3]
+export const rangeSpec = (id: RangeId) => RANGES.find((r) => r.id === id) ?? RANGES[5]
 
 export type TrendRow = { date: string } & Record<string, number | string | null>
 
@@ -22,10 +25,43 @@ export interface SeriesStats {
   changePct: number
 }
 
-function cutoff(days: number, today: Date): string {
+export function cutoff(days: number, today: Date): string {
   const d = new Date(today)
   d.setDate(d.getDate() - days)
   return d.toISOString().slice(0, 10)
+}
+
+/** Latest trading day present in the data (YYYY-MM-DD). */
+export function latestDay(histories: Record<string, PricePoint[] | undefined>): string | null {
+  let max: string | null = null
+  for (const pts of Object.values(histories)) {
+    const last = pts?.at(-1)?.date.slice(0, 10)
+    if (last && (!max || last > max)) max = last
+  }
+  return max
+}
+
+/** Marker time used for the previous-close baseline point on 1D charts. */
+export const PREV_CLOSE_TIME = '00:00:00'
+
+/**
+ * For 1D: keep only the latest session's bars and prepend each symbol's previous close,
+ * so the day's move is measured from yesterday's close (like brokers show it).
+ */
+export function oneDaySeries(
+  histories: Record<string, PricePoint[] | undefined>,
+  prevCloses: Record<string, number | undefined>,
+): { histories: Record<string, PricePoint[]>; day: string | null } {
+  const day = latestDay(histories)
+  const out: Record<string, PricePoint[]> = {}
+  if (!day) return { histories: out, day }
+  for (const [s, pts] of Object.entries(histories)) {
+    const today = (pts ?? []).filter((p) => p.date.startsWith(day))
+    if (!today.length) continue
+    const pc = prevCloses[s]
+    out[s] = pc ? [{ date: `${day} ${PREV_CLOSE_TIME}`, close: pc }, ...today] : today
+  }
+  return { histories: out, day }
 }
 
 /**
@@ -39,8 +75,14 @@ export function buildTrendRows(
   range: RangeId,
   mode: TrendMode,
   today = new Date(),
+  prevCloses: Record<string, number | undefined> = {},
 ): { rows: TrendRow[]; stats: SeriesStats[] } {
-  const from = cutoff(rangeSpec(range).days, today)
+  let from = cutoff(rangeSpec(range).days, today)
+  if (range === '1D') {
+    const one = oneDaySeries(histories, prevCloses)
+    histories = one.histories
+    from = one.day ?? from
+  }
   const byDate = new Map<string, TrendRow>()
   const stats: SeriesStats[] = []
 

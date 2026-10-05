@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react'
 import type { HistoryInterval, HistoryProvider, PricePoint } from '../providers/HistoryProvider'
 import { ProviderError } from '../providers/QuoteProvider'
 
-const TTL_MS = 6 * 60 * 60_000
+// Intraday bars go stale fast; daily and longer only change once a day.
+const ttl = (interval: HistoryInterval) => (interval === '5min' ? 5 * 60_000 : 6 * 60 * 60_000)
 const cacheKey = (interval: HistoryInterval) => `portfolio-tracker:history:${interval}`
 
 type Cache = Record<string, { fetchedAt: number; points: PricePoint[] }>
@@ -52,7 +53,7 @@ export function useHistory(
     if (!provider || !key) return
     const now = Date.now()
     const current = readCache(interval)
-    const due = key.split(',').filter((s) => !current[s] || now - current[s].fetchedAt > TTL_MS)
+    const due = key.split(',').filter((s) => !current[s] || now - current[s].fetchedAt > ttl(interval))
     if (due.length === 0) return
     let cancelled = false
 
