@@ -29,9 +29,22 @@ interface Props extends TxHandlers {
   realized: RealizedSale[]
   dividends: Dividend[]
   unknown: string[]
+  /** Ticked holdings (for combined totals / comparison). */
+  selected: string[]
+  onToggleSelect: (symbol: string) => void
+  onSelectAll: (all: boolean) => void
 }
 
-export function HoldingsTable({ positions, realized, dividends, unknown, ...handlers }: Props) {
+export function HoldingsTable({
+  positions,
+  realized,
+  dividends,
+  unknown,
+  selected,
+  onToggleSelect,
+  onSelectAll,
+  ...handlers
+}: Props) {
   const [sort, setSort] = useState<{ key: SortKey; dir: 1 | -1 }>({ key: 'marketValue', dir: -1 })
   const [open, setOpen] = useState<Record<string, boolean>>({})
 
@@ -62,40 +75,51 @@ export function HoldingsTable({ positions, realized, dividends, unknown, ...hand
           const isOpen = !!open[p.symbol]
           return (
             <li key={p.symbol}>
-              <Card className="overflow-hidden">
-                <button
-                  type="button"
-                  aria-expanded={isOpen}
-                  className="flex w-full items-start justify-between gap-3 p-4 text-left"
-                  onClick={() => toggle(p.symbol)}
-                >
-                  <div className="min-w-0">
-                    <p className="font-semibold">
-                      {p.symbol}
-                      {p.weight !== null && (
-                        <span className="ml-2 text-xs font-normal text-slate-500">{p.weight.toFixed(1)}%</span>
-                      )}
-                    </p>
-                    <p className="mt-0.5 text-xs text-slate-500 tabular-nums">
-                      {fmtShares(p.shares)} sh · avg {money(p.avgCost)} · now {money(p.price)}
-                    </p>
-                    <p className="text-xs text-slate-500 tabular-nums">
-                      Held {formatHolding(p.holdingDays)}
-                      {p.annualizedPct !== null && (
-                        <span className={gainColor(p.annualizedPct)}> · {signedPct(p.annualizedPct)}/yr</span>
-                      )}
-                    </p>
-                    {unknown.includes(p.symbol) && <p className="text-xs text-amber-600">Symbol not found</p>}
-                  </div>
-                  <div className="shrink-0 text-right tabular-nums">
-                    <p className="font-semibold">{money(p.marketValue)}</p>
-                    <p className={`text-sm font-medium ${gainColor(p.gain)}`}>
-                      {signedMoney(p.gain)} <span className="text-xs">({signedPct(p.gainPct)})</span>
-                    </p>
-                    <p className={`text-xs ${gainColor(p.dayChange)}`}>Today {signedMoney(p.dayChange)}</p>
-                    {p.extended && <ExtendedLine move={p.extended} withValue />}
-                  </div>
-                </button>
+              <Card className={`overflow-hidden ${selected.includes(p.symbol) ? 'ring-2 ring-teal-600' : ''}`}>
+                <div className="flex items-start">
+                  <label className="flex items-center self-stretch py-4 pl-4">
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4 accent-teal-700"
+                      checked={selected.includes(p.symbol)}
+                      onChange={() => onToggleSelect(p.symbol)}
+                      aria-label={`Select ${p.symbol}`}
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    aria-expanded={isOpen}
+                    className="flex min-w-0 flex-1 items-start justify-between gap-3 p-4 pl-3 text-left"
+                    onClick={() => toggle(p.symbol)}
+                  >
+                    <div className="min-w-0">
+                      <p className="font-semibold">
+                        {p.symbol}
+                        {p.weight !== null && (
+                          <span className="ml-2 text-xs font-normal text-slate-500">{p.weight.toFixed(1)}%</span>
+                        )}
+                      </p>
+                      <p className="mt-0.5 text-xs text-slate-500 tabular-nums">
+                        {fmtShares(p.shares)} sh · avg {money(p.avgCost)} · now {money(p.price)}
+                      </p>
+                      <p className="text-xs text-slate-500 tabular-nums">
+                        Held {formatHolding(p.holdingDays)}
+                        {p.annualizedPct !== null && (
+                          <span className={gainColor(p.annualizedPct)}> · {signedPct(p.annualizedPct)}/yr</span>
+                        )}
+                      </p>
+                      {unknown.includes(p.symbol) && <p className="text-xs text-amber-600">Symbol not found</p>}
+                    </div>
+                    <div className="shrink-0 text-right tabular-nums">
+                      <p className="font-semibold">{money(p.marketValue)}</p>
+                      <p className={`text-sm font-medium ${gainColor(p.gain)}`}>
+                        {signedMoney(p.gain)} <span className="text-xs">({signedPct(p.gainPct)})</span>
+                      </p>
+                      <p className={`text-xs ${gainColor(p.dayChange)}`}>Today {signedMoney(p.dayChange)}</p>
+                      {p.extended && <ExtendedLine move={p.extended} withValue />}
+                    </div>
+                  </button>
+                </div>
                 {isOpen && (
                   <div className="border-t border-slate-100 bg-slate-50/70 px-3 py-3 dark:border-slate-800 dark:bg-slate-950/40">
                     {detail(p)}
@@ -113,6 +137,18 @@ export function HoldingsTable({ positions, realized, dividends, unknown, ...hand
           <table className="w-full min-w-[860px] text-sm">
             <thead className="bg-slate-50 text-xs text-slate-500 uppercase dark:bg-slate-800/50">
               <tr>
+                <th scope="col" className="w-10 py-3 pl-4">
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 accent-teal-700"
+                    aria-label="Select all holdings"
+                    checked={positions.length > 0 && selected.length === positions.length}
+                    ref={(el) => {
+                      if (el) el.indeterminate = selected.length > 0 && selected.length < positions.length
+                    }}
+                    onChange={(e) => onSelectAll(e.target.checked)}
+                  />
+                </th>
                 {columns.map((c) => (
                   <th
                     key={c.label}
@@ -142,9 +178,18 @@ export function HoldingsTable({ positions, realized, dividends, unknown, ...hand
                 return (
                   <Fragment key={p.symbol}>
                     <tr
-                      className="cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/40"
+                      className={`cursor-pointer ${selected.includes(p.symbol) ? 'bg-teal-50/60 dark:bg-teal-950/30' : 'hover:bg-slate-50 dark:hover:bg-slate-800/40'}`}
                       onClick={() => toggle(p.symbol)}
                     >
+                      <td className="py-3 pl-4" onClick={(e) => e.stopPropagation()}>
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4 accent-teal-700"
+                          checked={selected.includes(p.symbol)}
+                          onChange={() => onToggleSelect(p.symbol)}
+                          aria-label={`Select ${p.symbol}`}
+                        />
+                      </td>
                       <td className="px-4 py-3">
                         <button
                           type="button"
@@ -201,7 +246,7 @@ export function HoldingsTable({ positions, realized, dividends, unknown, ...hand
                     </tr>
                     {isOpen && (
                       <tr className="bg-slate-50/70 dark:bg-slate-950/40">
-                        <td colSpan={columns.length} className="px-6 py-3">
+                        <td colSpan={columns.length + 1} className="px-6 py-3">
                           {detail(p)}
                         </td>
                       </tr>

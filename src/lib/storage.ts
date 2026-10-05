@@ -5,6 +5,9 @@ export const STORAGE_KEY = 'portfolio-tracker:v1'
 
 export const DEFAULT_SETTINGS: Settings = { refreshSeconds: 60 }
 
+/** 3-month T-bill was ~4.0% on 2026-10-01 (Fed H.15); users can change it in Settings. */
+export const DEFAULT_RISK_FREE = 4
+
 export function createProfile(name: string, lots: Lot[] = []): Profile {
   return {
     id: newId(),
@@ -122,6 +125,9 @@ export function parseState(raw: unknown): AppState | null {
       ? { twelveDataApiKey: s.twelveDataApiKey.trim() }
       : {}),
     ...(typeof s.showTrends === 'boolean' ? { showTrends: s.showTrends } : {}),
+    ...(Number.isFinite(Number(s.riskFreeRate)) && s.riskFreeRate !== null && s.riskFreeRate !== ''
+      ? { riskFreeRate: Math.min(25, Math.max(0, Number(s.riskFreeRate))) }
+      : {}),
   }
   const activeProfileId =
     typeof raw.activeProfileId === 'string' && profiles.some((p) => p.id === raw.activeProfileId)

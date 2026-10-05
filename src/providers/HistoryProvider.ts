@@ -4,7 +4,7 @@ export interface PricePoint {
   close: number
 }
 
-export type HistoryInterval = '1day' | '1week'
+export type HistoryInterval = '1day' | '1week' | '1month'
 
 /** Daily/weekly closing prices for charts. */
 export interface HistoryProvider {

@@ -265,4 +265,61 @@ describe('App', () => {
     await user.upload(screen.getByLabelText('Backup file'), new File(['hello'], 'x.json', { type: 'application/json' }))
     expect(await screen.findByRole('alert')).toHaveTextContent(/isn’t a Portfolio Tracker backup/)
   })
+
+  it('totals selected holdings and shows returns with Sharpe', async () => {
+    withKey()
+    const s = JSON.parse(localStorage.getItem('portfolio-tracker:v1')!)
+    s.settings.twelveDataApiKey = 'td'
+    s.profiles[0].lots = [
+      { id: 'a', symbol: 'AAPL', shares: 10, buyPrice: 100, buyDate: '2023-01-15' },
+      { id: 'm', symbol: 'MSFT', shares: 2, buyPrice: 250, buyDate: '2023-01-15' },
+      { id: 'k', symbol: 'KO', shares: 5, buyPrice: 60, buyDate: '2023-01-15' },
+    ]
+    localStorage.setItem('portfolio-tracker:v1', JSON.stringify(s))
+    // ~4 years of month-end closes rising 1–2% a month
+    const monthlyHistory = {
+      name: 'fake',
+      getHistory: async (symbol: string, interval: string) => {
+        if (interval !== '1month') return []
+        const out = []
+        const now = new Date()
+        for (let i = 48; i >= 0; i--) {
+          const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
+          out.push({
+            date: d.toISOString().slice(0, 10),
+            close: (symbol === 'SPY' ? 400 : 80) * Math.pow(1.01 + (i % 2) * 0.01, 48 - i),
+          })
+        }
+        return out
+      },
+    }
+    const user = userEvent.setup()
+    render(<App providerFactory={factory} historyFactory={() => monthlyHistory} />)
+    await screen.findByText(/prices updated/i)
+
+    await user.click(screen.getAllByRole('checkbox', { name: 'Select AAPL' })[0])
+    await user.click(screen.getAllByRole('checkbox', { name: 'Select MSFT' })[0])
+    const bar = screen.getByLabelText('Selected holdings total')
+    // AAPL 10 × $200 + MSFT 2 × $300 = $2,600; cost $1,000 + $500
+    expect(bar).toHaveTextContent('$2,600.00')
+    expect(bar).toHaveTextContent('$1,500.00')
+    expect(bar).toHaveTextContent('+$1,100.00')
+
+    await user.click(within(bar).getByRole('button', { name: /returns & sharpe/i }))
+    const stats = await screen.findByLabelText('Return statistics', {}, { timeout: 5000 })
+    await waitFor(() => expect(within(stats).getByText('Whole portfolio')).toBeInTheDocument())
+    expect(within(stats).getByText('Selected (2)')).toBeInTheDocument()
+    expect(within(stats).getByText('S&P 500 (SPY)')).toBeInTheDocument()
+    const spyRow = within(stats).getByText('S&P 500 (SPY)').closest('tr')!
+    // 48 months of history ⇒ Sharpe for 1, 2 and 3 years, not 5
+    const cells = within(spyRow)
+      .getAllByRole('cell')
+      .map((c) => c.textContent)
+    expect(cells.slice(-4, -1).every((c) => c !== '—')).toBe(true)
+    expect(cells.at(-1)).toBe('—')
+    expect(screen.getByLabelText('Monthly returns')).toHaveTextContent('Monthly returns — Whole portfolio')
+
+    await user.click(within(stats).getByRole('button', { name: 'AAPL' }))
+    expect(screen.getByLabelText('Monthly returns')).toHaveTextContent('Monthly returns — AAPL')
+  })
 })

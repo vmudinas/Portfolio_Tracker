@@ -2,6 +2,7 @@ import { useRef, useState } from 'react'
 import { exportCsv, importTransactions, type ImportResult } from '../lib/csv'
 import type { Theme } from '../hooks/useTheme'
 import { activeProfile } from '../state/reducer'
+import { DEFAULT_RISK_FREE } from '../lib/storage'
 import type { AppState, Book, Settings } from '../types'
 import { Button, Field, inputClass, Modal } from './ui'
 
@@ -30,6 +31,7 @@ export function SettingsDialog({
   const [tdKey, setTdKey] = useState(state.settings.twelveDataApiKey ?? '')
   const [showKey, setShowKey] = useState(false)
   const [refresh, setRefresh] = useState(String(state.settings.refreshSeconds))
+  const [riskFree, setRiskFree] = useState(String(state.settings.riskFreeRate ?? DEFAULT_RISK_FREE))
   const [message, setMessage] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null)
   const [confirmClear, setConfirmClear] = useState(false)
   const csvRef = useRef<HTMLInputElement>(null)
@@ -41,6 +43,10 @@ export function SettingsDialog({
       finnhubApiKey: apiKey.trim() || undefined,
       twelveDataApiKey: tdKey.trim() || undefined,
       refreshSeconds: Number(refresh),
+      riskFreeRate:
+        Number.isFinite(Number(riskFree)) && riskFree.trim() !== ''
+          ? Math.min(25, Math.max(0, Number(riskFree)))
+          : DEFAULT_RISK_FREE,
     })
     onClose()
   }
@@ -125,6 +131,22 @@ export function SettingsDialog({
             placeholder="Paste your Twelve Data key"
             autoComplete="off"
             spellCheck={false}
+          />
+        </Field>
+
+        <Field
+          label="Risk-free rate for Sharpe ratio (%)"
+          hint="Usually the 3-month Treasury bill yield (about 4.0% in Oct 2026)."
+        >
+          <input
+            className={inputClass}
+            type="number"
+            inputMode="decimal"
+            min="0"
+            max="25"
+            step="0.05"
+            value={riskFree}
+            onChange={(e) => setRiskFree(e.target.value)}
           />
         </Field>
 
