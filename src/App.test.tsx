@@ -322,4 +322,70 @@ describe('App', () => {
     await user.click(within(stats).getByRole('button', { name: 'AAPL' }))
     expect(screen.getByLabelText('Monthly returns')).toHaveTextContent('Monthly returns — AAPL')
   })
+
+  it('compares portfolios side by side with a combined total', async () => {
+    withKey()
+    const st = JSON.parse(localStorage.getItem('portfolio-tracker:v1')!)
+    st.profiles[0].name = 'Growth'
+    st.profiles[0].lots = [{ id: 'a', symbol: 'AAPL', shares: 10, buyPrice: 150, buyDate: '2024-01-02' }]
+    st.profiles.push({
+      id: 'p2',
+      name: 'Income',
+      createdAt: '2024-01-01',
+      lots: [{ id: 'm', symbol: 'MSFT', shares: 2, buyPrice: 250, buyDate: '2024-01-02' }],
+      sales: [],
+      dividends: [{ id: 'd', symbol: 'MSFT', amount: 10, date: '2024-06-01' }],
+      cash: 100,
+      watchlist: [],
+      alerts: [],
+    })
+    localStorage.setItem('portfolio-tracker:v1', JSON.stringify(st))
+    const user = userEvent.setup()
+    render(<App providerFactory={factory} />)
+    await user.click(screen.getByRole('tab', { name: 'Portfolios' }))
+    const table = await screen.findByRole('table', { name: 'Portfolio totals' }, { timeout: 5000 })
+    // Growth: 10 × $200 = $2,000. Income: 2 × $300 + $100 cash = $700 (MSFT priced once the tab loads its quote).
+    await waitFor(() => expect(within(table).getByText('$700.00')).toBeInTheDocument())
+    expect(
+      within(table)
+        .getByRole('button', { name: /Growth/ })
+        .closest('tr')!,
+    ).toHaveTextContent('$2,000.00')
+    const combinedRow = within(table).getByText('Combined (2)').closest('tr')!
+    expect(combinedRow).toHaveTextContent('$2,700.00')
+    await user.click(within(table).getByRole('checkbox', { name: 'Include Income' }))
+    expect(within(table).getByText('Combined (1)').closest('tr')!).toHaveTextContent('$2,000.00')
+    await user.click(within(table).getByRole('button', { name: /Income/ }))
+    expect(screen.getByRole('tab', { name: /Holdings/ })).toHaveAttribute('aria-selected', 'true')
+  })
+
+  it('shows the market heat map and top 20 gainers/losers among large caps', async () => {
+    withKey()
+    // every symbol gets a price; % change depends on the ticker so ordering is deterministic
+    const market: QuoteProvider = {
+      name: 'market',
+      getQuote: async (sym) => {
+        const pct = ((sym.charCodeAt(0) * 7 + sym.length * 13) % 21) - 10
+        return { symbol: sym, price: 100, change: pct, changePct: pct, prevClose: 100 - pct, updatedAt: '' }
+      },
+      search: async () => [],
+    }
+    const user = userEvent.setup()
+    render(<App providerFactory={() => market} />)
+    await user.click(screen.getByRole('tab', { name: 'Heat map' }))
+    const map = screen.getByRole('img', { name: 'Market heat map' })
+    expect(map).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByText(/S&P 500/)).toBeInTheDocument())
+
+    await user.click(screen.getByRole('tab', { name: 'Top movers' }))
+    const gainers = await screen.findByRole('table', { name: 'Top 20 gainers' })
+    await waitFor(() => expect(within(gainers).getAllByRole('row').length).toBeGreaterThan(5), { timeout: 8000 })
+    const pcts = within(gainers)
+      .getAllByRole('row')
+      .slice(1)
+      .map((r) => Number(r.querySelectorAll('td')[3].textContent!.replace('%', '').replace('−', '-').replace('+', '')))
+    expect([...pcts].sort((a, b) => b - a)).toEqual(pcts)
+    await user.click(screen.getByRole('button', { name: 'Whole US market' }))
+    expect(screen.getByRole('button', { name: 'Add Alpha Vantage key' })).toBeInTheDocument()
+  }, 15000)
 })
