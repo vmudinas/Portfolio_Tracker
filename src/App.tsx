@@ -44,9 +44,11 @@ interface Props {
   /** Injected in tests; defaults to Finnhub with the user's key. */
   providerFactory?: (apiKey: string) => QuoteProvider
   historyFactory?: (apiKey: string) => HistoryProvider
+  /** Locks the app (back to the login page). */
+  onLock?: () => void
 }
 
-function App({ providerFactory = createFinnhubProvider, historyFactory = createTwelveDataProvider }: Props) {
+function App({ providerFactory = createFinnhubProvider, historyFactory = createTwelveDataProvider, onLock }: Props) {
   const [state, dispatch] = useAppState()
   const [theme, setTheme] = useTheme()
   const [editing, setEditing] = useState<TxEditing | null>(null)
@@ -221,6 +223,11 @@ function App({ providerFactory = createFinnhubProvider, historyFactory = createT
           <Button aria-label="Settings" title="Settings" onClick={() => setSettingsOpen(true)}>
             ⚙<span className="hidden sm:inline">Settings</span>
           </Button>
+          {onLock && (
+            <Button aria-label="Lock" title="Lock (log out)" onClick={onLock}>
+              🔒<span className="hidden sm:inline">Lock</span>
+            </Button>
+          )}
         </div>
       </header>
 
