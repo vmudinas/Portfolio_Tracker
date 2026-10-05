@@ -2,23 +2,36 @@ import { extendedLabel, gainColor, money, signedMoney, signedPct } from '../lib/
 import type { PortfolioSummary } from '../types'
 import { Card } from './ui'
 
-export function SummaryCards({ summary, onEditCash }: { summary: PortfolioSummary; onEditCash: () => void }) {
+export function SummaryCards({
+  summary,
+  onEditCash,
+  label = 'Portfolio summary',
+}: {
+  summary: PortfolioSummary
+  /** Omit to show cash as plain text (e.g. the all-funds total). */
+  onEditCash?: () => void
+  label?: string
+}) {
   const s = summary
   return (
-    <section aria-label="Portfolio summary" className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+    <section aria-label={label} className="grid grid-cols-2 gap-3 lg:grid-cols-4">
       <Card className="p-4">
         <Label>Total value</Label>
         <Big>{money(s.totalValue)}</Big>
         <p className="text-sm text-slate-500 tabular-nums">
           Stocks {money(s.marketValue)} ·{' '}
-          <button
-            type="button"
-            onClick={onEditCash}
-            className="underline decoration-dotted underline-offset-2 hover:text-slate-800 dark:hover:text-slate-200"
-            aria-label={`Cash ${money(s.cash)}, edit`}
-          >
-            Cash {money(s.cash)}
-          </button>
+          {onEditCash ? (
+            <button
+              type="button"
+              onClick={onEditCash}
+              className="underline decoration-dotted underline-offset-2 hover:text-slate-800 dark:hover:text-slate-200"
+              aria-label={`Cash ${money(s.cash)}, edit`}
+            >
+              Cash {money(s.cash)}
+            </button>
+          ) : (
+            <>Cash {money(s.cash)}</>
+          )}
         </p>
       </Card>
       <Card className="p-4">

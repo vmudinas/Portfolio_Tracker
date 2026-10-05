@@ -230,3 +230,26 @@ export function formatHolding(days: number | null): string {
   const m = Math.floor((days - y * 365) / 30.4)
   return y ? (m ? `${y}y ${m}m` : `${y}y`) : `${m}m`
 }
+
+/** Adds up several portfolio summaries (e.g. every fund) into one total. */
+export function combineSummaries(list: PortfolioSummary[]): PortfolioSummary {
+  const sum = (f: (s: PortfolioSummary) => number) => round2(list.reduce((t, s) => t + f(s), 0))
+  const costBasis = sum((s) => s.costBasis)
+  const gain = sum((s) => s.gain)
+  const withExt = list.filter((s) => s.extendedChange !== null)
+  return {
+    costBasis,
+    marketValue: sum((s) => s.marketValue),
+    cash: sum((s) => s.cash),
+    totalValue: sum((s) => s.totalValue),
+    gain,
+    gainPct: costBasis ? (gain / costBasis) * 100 : 0,
+    dayChange: sum((s) => s.dayChange),
+    extendedChange: withExt.length ? round2(withExt.reduce((t, s) => t + (s.extendedChange ?? 0), 0)) : null,
+    extendedSession: withExt.find((s) => s.extendedSession)?.extendedSession ?? null,
+    realizedGain: sum((s) => s.realizedGain),
+    dividends: sum((s) => s.dividends),
+    totalReturn: sum((s) => s.totalReturn),
+    missingQuotes: [...new Set(list.flatMap((s) => s.missingQuotes))].sort(),
+  }
+}

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Lot, Quote, Sale } from '../types'
-import { analyze, formatHolding, matchLots, sharesHeld, visibleExtended } from './portfolio'
+import { analyze, combineSummaries, formatHolding, matchLots, sharesHeld, visibleExtended } from './portfolio'
 
 const lot = (over: Partial<Lot>): Lot => ({
   id: crypto.randomUUID(),
@@ -177,4 +177,18 @@ it('formats holding periods', () => {
   expect(formatHolding(365)).toBe('1y')
   expect(formatHolding(800)).toBe('2y 2m')
   expect(formatHolding(null)).toBe('—')
+})
+
+describe('combineSummaries', () => {
+  const base = analyze({ lots: [], sales: [], dividends: [] }, {}, {}, { cash: 0 }).summary
+  it('adds up funds and recomputes the gain %', () => {
+    const a = { ...base, costBasis: 100, marketValue: 150, cash: 10, totalValue: 160, gain: 50, dayChange: 2 }
+    const b = { ...base, costBasis: 300, marketValue: 250, cash: 0, totalValue: 250, gain: -50, dayChange: -1 }
+    const c = combineSummaries([a, { ...b, extendedChange: 3, extendedSession: 'post' as const, missingQuotes: ['X'] }])
+    expect(c).toMatchObject({ costBasis: 400, totalValue: 410, cash: 10, gain: 0, gainPct: 0, dayChange: 1 })
+    expect(c.extendedChange).toBe(3)
+    expect(c.extendedSession).toBe('post')
+    expect(c.missingQuotes).toEqual(['X'])
+    expect(combineSummaries([a]).gainPct).toBe(50)
+  })
 })

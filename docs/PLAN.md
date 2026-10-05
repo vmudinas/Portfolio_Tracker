@@ -204,3 +204,9 @@ No secrets are needed — there is no server and no committed API key.
 - **2W**: from the close on or before 14 days ago (daily bars); portfolio 2W is time-weighted, so money added during the window isn't counted as gain.
 - Shown as range buttons on Performance, Compare stocks and the Portfolios chart, and as 1D/2W columns in the Returns & Sharpe and Portfolios tables. Sharpe columns are now 1Y and 3Y; 2Y/3Y annualized return columns replace Sharpe 2Y/5Y.
 - Symbols with no price history yet are left out of portfolio return calculations instead of distorting them.
+
+## 7g. All funds overview (added 2026-10-05)
+
+- The "Portfolios" tab is now **All funds (n)**, placed right after Holdings and also reachable from the profile menu.
+- While it is open, the summary cards show totals across every fund (value/AUM, cash, unrealized, today, realized, dividends, total return); the fund table adds each fund's % of the combined value.
+- The section tabs now sit directly under the summary, and the single-fund charts panel only shows on the Holdings tab, so the other tabs are no longer pushed below the charts.
