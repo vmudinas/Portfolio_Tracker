@@ -188,8 +188,9 @@ function App({ providerFactory = createFinnhubProvider, historyFactory = createT
   }
 
   const hasActivity = profile.lots.length + profile.sales.length + profile.dividends.length > 0
-  const anyActivity = state.profiles.some((p) => p.lots.length + p.sales.length + p.dividends.length > 0)
-  const showSummary = allFunds ? anyActivity : hasActivity
+  // Cash alone is worth showing (and editing): a fund can hold only cash, e.g. after its last sale was deleted.
+  const hasValue = (p: typeof profile) => p.lots.length + p.sales.length + p.dividends.length > 0 || p.cash !== 0
+  const showSummary = allFunds ? state.profiles.some(hasValue) : hasValue(profile)
   const watchCount = profile.watchlist.length + profile.alerts.filter((a) => !a.triggeredAt).length
 
   return (
