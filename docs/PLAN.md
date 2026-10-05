@@ -167,7 +167,7 @@ No secrets are needed — there is no server and no committed API key.
 - **Data**: Twelve Data monthly closes (`interval=1month`, up to 240 months), cached 6 h.
 - **Portfolio / selection monthly returns**: Modified Dietz per calendar month (flows weighted by days remaining), month-end value = shares held × month-end close (carried forward), current month uses live regular-session prices. Cash and dividends excluded.
 - **Holding returns**: month-over-month price returns; ITD = latest price ÷ your first purchase price − 1. **Benchmark** (SPY) ITD aligned to the portfolio’s first month.
-- **Stats**: YTD (compounded months this year), 1Y (last 12 full months), ITD and annualized ITD (≥ 1 year), Sharpe = mean excess monthly return ÷ sample stdev × √12 over the last 12/24/36/60 full months (shown only when available). Risk-free rate configurable in Settings (default 4.0% ≈ 3-month T-bill, Fed H.15, 2026-10-01).
+- **Stats**: YTD (compounded months this year), 1Y (last 12 full months), ITD and annualized ITD (≥ 1 year), Sharpe = mean excess monthly return ÷ sample stdev × √12 over the last 12/36 full months (shown only when available). 2Y/3Y returns are annualized from the last 24/36 full months. Risk-free rate configurable in Settings (default 4.0% ≈ 3-month T-bill, Fed H.15, 2026-10-01).
 
 ## 7d. Portfolios comparison, heat map, top movers (added 2026-10-04)
 
@@ -197,3 +197,10 @@ No secrets are needed — there is no server and no committed API key.
 | 4. Quality     | Tests for all of the above, loading/error/empty states, responsive, accessibility pass                                                                                                                      | ⏭ next (partly done: 23 tests, mobile card layout) |
 | 5. Extras      | ✅ history chart (Twelve Data), ✅ JSON backup, ✅ sample data, ✅ WebSocket live prices (pre/after hours), ✅ market-hours polling · ⏭ allocation chart, CSV import/export, portfolio-value-over-time line | partly done                                        |
 | 6. Later       | Optional backend (Node API / serverless) for Alpaca or server-side keys, real accounts + cloud sync, dividends, sells & realized gains                                                                      |                                                    |
+
+## 7f. Short-term returns (added 2026-10-05)
+
+- **1D**: from the previous close, 5-minute intraday bars (Twelve Data, cached 5 min); portfolio 1D = Σ shares × change ÷ Σ shares × previous close.
+- **2W**: from the close on or before 14 days ago (daily bars); portfolio 2W is time-weighted, so money added during the window isn't counted as gain.
+- Shown as range buttons on Performance, Compare stocks and the Portfolios chart, and as 1D/2W columns in the Returns & Sharpe and Portfolios tables. Sharpe columns are now 1Y and 3Y; 2Y/3Y annualized return columns replace Sharpe 2Y/5Y.
+- Symbols with no price history yet are left out of portfolio return calculations instead of distorting them.

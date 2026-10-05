@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useProfiles } from '../../hooks/useProfiles'
 import type { HistoryProvider } from '../../providers/HistoryProvider'
 import type { QuoteProvider } from '../../providers/QuoteProvider'
-import type { Book, Position } from '../../types'
+import type { Book, Position, Quote } from '../../types'
 import { Card, Tabs } from '../ui'
 import AllocationView from './AllocationView'
 import { NeedsHistoryKey } from './common'
@@ -25,6 +25,7 @@ interface Props {
   /** Holdings ticked in the table. */
   selected: string[]
   latestPrices: Record<string, number | undefined>
+  quotes: Record<string, Quote | undefined>
   riskFree: number
   /** Ask the panel to switch view (and preselect stocks for Compare). `id` changes per request. */
   request?: { id: number; view: View; symbols?: string[] }
@@ -47,6 +48,9 @@ export default function ChartsPanel(props: Props) {
     setHandled(props.request.id)
     setView(props.request.view)
   }
+  const prevCloses = Object.fromEntries(
+    Object.entries(props.quotes).flatMap(([s, q]) => (q?.prevClose ? [[s, q.prevClose]] : [])),
+  ) as Record<string, number>
   const profiles = useProfiles(view === 'allocation' ? props.symbols : [], props.quoteProvider)
 
   const choose = (v: View) => {
@@ -75,7 +79,7 @@ export default function ChartsPanel(props: Props) {
         {view === 'allocation' && <AllocationView positions={props.positions} cash={props.cash} profiles={profiles} />}
         {view !== 'allocation' && !props.historyProvider && <NeedsHistoryKey onOpenSettings={props.onOpenSettings} />}
         {view === 'performance' && props.historyProvider && (
-          <PerformanceView book={props.book} provider={props.historyProvider} />
+          <PerformanceView book={props.book} provider={props.historyProvider} prevCloses={prevCloses} />
         )}
         {view === 'returns' && props.historyProvider && (
           <ReturnsView
@@ -83,6 +87,7 @@ export default function ChartsPanel(props: Props) {
             held={props.symbols}
             selected={props.selected}
             latestPrices={props.latestPrices}
+            quotes={props.quotes}
             riskFree={props.riskFree}
             provider={props.historyProvider}
           />
@@ -93,6 +98,7 @@ export default function ChartsPanel(props: Props) {
             symbols={props.symbols}
             provider={props.historyProvider}
             preselect={props.request?.view === 'compare' ? props.request.symbols : undefined}
+            prevCloses={prevCloses}
           />
         )}
       </div>

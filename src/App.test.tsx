@@ -311,12 +311,15 @@ describe('App', () => {
     expect(within(stats).getByText('Selected (2)')).toBeInTheDocument()
     expect(within(stats).getByText('S&P 500 (SPY)')).toBeInTheDocument()
     const spyRow = within(stats).getByText('S&P 500 (SPY)').closest('tr')!
-    // 48 months of history ⇒ Sharpe for 1, 2 and 3 years, not 5
+    const headers = within(stats)
+      .getAllByRole('columnheader')
+      .map((h) => h.textContent)
+    expect(headers.slice(1)).toEqual(['1D', '2W', 'YTD', '1Y', '2Y', '3Y', 'ITD', 'ITD / yr', 'Sharpe 1Y', 'Sharpe 3Y'])
+    // 48 months of history ⇒ 2Y/3Y returns and both Sharpe ratios are available; 1D comes from the live SPY quote
     const cells = within(spyRow)
       .getAllByRole('cell')
       .map((c) => c.textContent)
-    expect(cells.slice(-4, -1).every((c) => c !== '—')).toBe(true)
-    expect(cells.at(-1)).toBe('—')
+    expect(cells.slice(5).every((c) => c !== '—')).toBe(true)
     expect(screen.getByLabelText('Monthly returns')).toHaveTextContent('Monthly returns — Whole portfolio')
 
     await user.click(within(stats).getByRole('button', { name: 'AAPL' }))

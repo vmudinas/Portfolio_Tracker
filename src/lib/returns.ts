@@ -15,15 +15,18 @@ export interface ReturnStats {
   ytd: number | null
   /** Last 12 full months. */
   oneYear: number | null
+  /** Last 24 / 36 full months, annualized. */
+  twoYear: number | null
+  threeYear: number | null
   /** Inception-to-date (cumulative). */
   itd: number | null
   /** ITD annualized when the history is over a year. */
   itdAnnualized: number | null
   inception: string | null
-  sharpe: Record<1 | 2 | 3 | 5, number | null>
+  sharpe: Record<(typeof SHARPE_YEARS)[number], number | null>
 }
 
-export const SHARPE_YEARS = [1, 2, 3, 5] as const
+export const SHARPE_YEARS = [1, 3] as const
 
 const monthOf = (date: string) => date.slice(0, 7)
 const daysIn = (month: string) => {
@@ -74,9 +77,13 @@ export function portfolioMonthlyReturns(
   today = new Date(),
   latestPrices: Record<string, number | undefined> = {},
 ): { returns: MonthReturn[]; missing: string[] } {
-  const symbols = [...new Set(book.lots.map((l) => l.symbol.toUpperCase()))]
+  const all = [...new Set(book.lots.map((l) => l.symbol.toUpperCase()))]
+  const missing = all.filter((s) => !monthly[s]?.length)
+  // Leave out holdings without price history entirely (their buys and sales too), so they don't look like losses.
+  const symbols = all.filter((s) => !missing.includes(s))
+  if (!symbols.length) return { returns: [], missing }
+  book = filterBook(book, symbols)
   const closes = new Map(symbols.map((s) => [s, monthlyCloses(monthly[s] ?? [])]))
-  const missing = symbols.filter((s) => !closes.get(s)!.size)
   const firstBuy = book.lots
     .map((l) => l.buyDate)
     .filter(Boolean)
@@ -140,7 +147,7 @@ export function sharpe(rets: number[], riskFreeAnnualPct: number): number | null
 }
 
 /**
- * YTD, trailing 1-year, inception-to-date and Sharpe (1/2/3/5 years of full months, when available).
+ * YTD, trailing 1/2/3-year (2Y and 3Y annualized), inception-to-date and Sharpe (1 and 3 years of full months), when available.
  * `itdOverride` lets a holding use its real cost (first buy price) instead of the first month in the data.
  */
 export function returnStats(
@@ -160,9 +167,15 @@ export function returnStats(
       (365.25 * 86_400_000)
     : 0
   const one = lastN(12)
+  const annualized = (n: number) => {
+    const r = lastN(n)
+    return r ? Math.pow(1 + chain(r), 12 / n) - 1 : null
+  }
   return {
     ytd: ytdRets.length ? chain(ytdRets.map((r) => r.ret)) : null,
     oneYear: one ? chain(one) : null,
+    twoYear: annualized(24),
+    threeYear: annualized(36),
     itd,
     itdAnnualized: itd !== null && years >= 1 ? Math.pow(1 + itd, 1 / years) - 1 : null,
     inception,

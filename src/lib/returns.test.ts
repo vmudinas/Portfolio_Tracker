@@ -94,9 +94,10 @@ describe('stats', () => {
     expect(s.inception).toBe('2024-05')
     expect(s.itdAnnualized).not.toBeNull()
     expect(s.sharpe[1]).not.toBeNull()
-    expect(s.sharpe[2]).not.toBeNull()
-    expect(s.sharpe[3]).toBeNull()
-    expect(s.sharpe[5]).toBeNull()
+    expect(s.sharpe[3]).toBeNull() // only 30 months
+    // 2Y return is annualized over the last 24 full months; 3Y needs 36
+    expect(s.twoYear).toBeCloseTo(Math.pow(1 + chain(rets.slice(-24).map((r) => r.ret)), 0.5) - 1)
+    expect(s.threeYear).toBeNull()
   })
 
   it('annualizes Sharpe from monthly returns with a risk-free rate', () => {

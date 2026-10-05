@@ -52,8 +52,16 @@ export function buildPerformance(
   benchmark: PricePoint[] | undefined,
   fromDate: string,
 ): { rows: PerfRow[]; missing: string[] } {
-  const symbols = [...new Set(book.lots.map((l) => l.symbol.toUpperCase()))]
-  const missing = symbols.filter((s) => !histories[s]?.length)
+  const all = [...new Set(book.lots.map((l) => l.symbol.toUpperCase()))]
+  const missing = all.filter((s) => !histories[s]?.length)
+  // Holdings without price history are left out completely (including their cash flows).
+  const symbols = all.filter((s) => !missing.includes(s))
+  const keep = new Set(symbols)
+  book = {
+    lots: book.lots.filter((l) => keep.has(l.symbol.toUpperCase())),
+    sales: book.sales.filter((x) => keep.has(x.symbol.toUpperCase())),
+    dividends: book.dividends,
+  }
   const firstBuy = book.lots
     .map((l) => l.buyDate)
     .filter(Boolean)

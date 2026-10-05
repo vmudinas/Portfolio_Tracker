@@ -7,18 +7,21 @@ import {
   fundMonthlyReturns,
   portfolioMonthlyReturns,
   returnStats,
-  SHARPE_YEARS,
   type MonthReturn,
   type ReturnStats,
 } from '../../lib/returns'
-import type { HistoryProvider } from '../../providers/HistoryProvider'
+import { buildPerformance } from '../../lib/performance'
+import { holdingOneDay, holdingTwoWeek, portfolioOneDay, portfolioTwoWeek } from '../../lib/shortTerm'
+import { cutoff, oneDaySeries } from '../../lib/trends'
+import type { HistoryProvider, PricePoint } from '../../providers/HistoryProvider'
 import type { Book, ExtendedQuote, Profile, Quote } from '../../types'
 import { Card, Segmented } from '../ui'
-import { axisTick, NEUTRAL, seriesColor } from './chartUtils'
+import { axisTick, fmtDate, NEUTRAL, seriesColor } from './chartUtils'
+import { StatsCells, StatsHeader } from './StatsColumns'
 import { ChartMessage, NeedsHistoryKey, Swatch, TooltipBox } from './common'
 import { BENCHMARK } from './PerformanceView'
 
-type Range = '1Y' | '3Y' | '5Y' | 'All'
+type Range = '1D' | '2W' | '1Y' | '3Y' | '5Y' | 'All'
 const COMBINED = '__combined'
 
 interface Props {
@@ -34,7 +37,6 @@ interface Props {
 }
 
 const bookOf = (p: Profile): Book => ({ lots: p.lots, sales: p.sales, dividends: p.dividends })
-const pct = (v: number | null | undefined) => (v === null || v === undefined ? '—' : signedPct(v * 100))
 const monthLabel = (m: string) =>
   new Date(`${m}-15T12:00:00`).toLocaleDateString('en-US', { month: 'short', year: '2-digit' })
 
@@ -78,18 +80,38 @@ export default function PortfoliosView(props: Props) {
     [profiles],
   )
   const { histories, loading, error } = useHistory(provider ? symbols : [], provider, '1month', 240)
+  // Daily closes for the 2W column and chart; 5-minute bars only while the 1D chart is shown.
+  const daily = useHistory(provider ? symbols : [], provider, '1day', 260).histories
+  const intraday = useHistory(provider && range === '1D' ? symbols : [], provider, '5min', 80)
+  const prevCloses = useMemo(
+    () => Object.fromEntries(Object.entries(quotes).flatMap(([k, q]) => (q?.prevClose ? [[k, q.prevClose]] : []))),
+    [quotes],
+  ) as Record<string, number>
   const series = useMemo(() => {
     const out: {
       id: string
       label: string
       returns: MonthReturn[]
       stats: ReturnStats
+      oneDay: number | null
+      twoWeek: number | null
+      book?: Book
       slot?: number
       bench?: boolean
     }[] = []
     profiles.forEach((p, i) => {
       const r = portfolioMonthlyReturns(bookOf(p), histories, today, regularPrices).returns
-      if (r.length) out.push({ id: p.id, label: p.name, returns: r, stats: returnStats(r, riskFree, today), slot: i })
+      if (r.length || p.lots.length)
+        out.push({
+          id: p.id,
+          label: p.name,
+          returns: r,
+          stats: returnStats(r, riskFree, today),
+          oneDay: portfolioOneDay(bookOf(p), quotes),
+          twoWeek: portfolioTwoWeek(bookOf(p), daily, today),
+          book: bookOf(p),
+          slot: i,
+        })
     })
     if (inc.length > 1) {
       const book: Book = {
@@ -98,13 +120,14 @@ export default function PortfoliosView(props: Props) {
         dividends: inc.flatMap((p) => p.dividends),
       }
       const r = portfolioMonthlyReturns(book, histories, today, regularPrices).returns
-      if (r.length)
-        out.push({
-          id: COMBINED,
-          label: `Combined (${inc.length})`,
-          returns: r,
-          stats: returnStats(r, riskFree, today),
-        })
+      out.push({
+        id: COMBINED,
+        label: `Combined (${inc.length})`,
+        returns: r,
+        stats: returnStats(r, riskFree, today),
+        oneDay: portfolioOneDay(book, quotes),
+        twoWeek: portfolioTwoWeek(book, daily, today),
+      })
     }
     const spy = histories[BENCHMARK]
     if (spy?.length) {
@@ -121,16 +144,56 @@ export default function PortfoliosView(props: Props) {
         label: 'S&P 500 (SPY)',
         returns: r,
         stats: { ...stats, itd: aligned.itd, itdAnnualized: aligned.itdAnnualized, inception: aligned.inception },
+        oneDay: holdingOneDay(quotes[BENCHMARK]),
+        twoWeek: holdingTwoWeek(daily[BENCHMARK], regularPrices[BENCHMARK], today),
         bench: true,
       })
     }
     return out
-  }, [profiles, inc, histories, regularPrices, riskFree, today])
+  }, [profiles, inc, histories, daily, quotes, regularPrices, riskFree, today])
 
   // ---- Growth chart: cumulative return per profile from the start of the range.
   const chart = useMemo(() => {
-    const months = range === 'All' ? Infinity : Number(range[0]) * 12
     const lines = series.filter((s) => s.id !== COMBINED)
+    type ChartRow = Record<string, number | string | null>
+
+    // 1D / 2W: time-weighted value from intraday or daily bars (1D starts from the previous close).
+    if (range === '1D' || range === '2W') {
+      let H: Record<string, PricePoint[] | undefined> = daily
+      let from = cutoff(14, today)
+      if (range === '1D') {
+        const one = oneDaySeries(intraday.histories, prevCloses)
+        H = one.histories
+        from = one.day ?? cutoff(1, today)
+      } else {
+        // Start at the last close on or before the cut-off so the first day's move counts.
+        let base = ''
+        for (const pts of Object.values(daily)) {
+          const hit = pts?.filter((p) => p.date <= from).at(-1)
+          if (hit && hit.date > base) base = hit.date
+        }
+        from = base || from
+      }
+      const byX = new Map<string, ChartRow>()
+      const put = (x: string, id: string, v: number) => {
+        const row = byX.get(x) ?? ({ x } as ChartRow)
+        row[id] = Math.round(v * 100) / 100
+        byX.set(x, row)
+      }
+      for (const s of lines) {
+        if (s.bench) {
+          const pts = (H[BENCHMARK] ?? []).filter((p) => p.date >= from)
+          const base = pts[0]?.close
+          if (base) for (const p of pts) put(p.date, s.id, (p.close / base - 1) * 100)
+        } else if (s.book) {
+          for (const r of buildPerformance(s.book, H, undefined, from).rows) put(r.date, s.id, r.portfolioPct)
+        }
+      }
+      const rows = [...byX.values()].sort((a, b) => String(a.x).localeCompare(String(b.x)))
+      return { rows, lines }
+    }
+
+    const months = range === 'All' ? Infinity : Number(range[0]) * 12
     const all = [...new Set(lines.flatMap((s) => s.returns.map((r) => r.month)))].sort()
     const firstPortfolio = lines
       .filter((s) => !s.bench)
@@ -140,11 +203,11 @@ export default function PortfoliosView(props: Props) {
     const window = all
       .filter((m) => !firstPortfolio || m >= firstPortfolio)
       .slice(Number.isFinite(months) ? -months : 0)
-    if (!window.length) return { rows: [], lines }
+    if (!window.length) return { rows: [] as ChartRow[], lines }
     const cum: Record<string, number> = {}
-    const rows: Record<string, number | string | null>[] = []
+    const rows: ChartRow[] = []
     window.forEach((m, i) => {
-      const row: Record<string, number | string | null> = { month: m }
+      const row: ChartRow = { x: m }
       for (const s of lines) {
         const r = s.returns.find((x) => x.month === m)
         if (r) {
@@ -157,7 +220,8 @@ export default function PortfoliosView(props: Props) {
       rows.push(row)
     })
     return { rows, lines }
-  }, [series, range])
+  }, [series, range, daily, intraday.histories, prevCloses, today])
+  const xLabel = (x: string, long = false) => (range === '1D' || range === '2W' ? fmtDate(x, long) : monthLabel(x))
 
   const toggle = (id: string) => setIncluded((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]))
 
@@ -262,7 +326,7 @@ export default function PortfoliosView(props: Props) {
               label="Range"
               value={range}
               onChange={setRange}
-              options={(['1Y', '3Y', '5Y', 'All'] as const).map((r) => ({ id: r, label: r }))}
+              options={(['1D', '2W', '1Y', '3Y', '5Y', 'All'] as const).map((r) => ({ id: r, label: r }))}
             />
           )}
         </div>
@@ -282,8 +346,8 @@ export default function PortfoliosView(props: Props) {
                   <LineChart data={chart.rows} margin={{ top: 8, right: 12, bottom: 0, left: 0 }}>
                     <CartesianGrid vertical={false} stroke="var(--chart-grid)" />
                     <XAxis
-                      dataKey="month"
-                      tickFormatter={monthLabel}
+                      dataKey="x"
+                      tickFormatter={(x: string) => xLabel(x)}
                       minTickGap={30}
                       tick={axisTick}
                       axisLine={{ stroke: 'var(--chart-grid)' }}
@@ -303,7 +367,7 @@ export default function PortfoliosView(props: Props) {
                       content={({ active, payload, label }) =>
                         active && payload?.length ? (
                           <TooltipBox
-                            title={monthLabel(String(label))}
+                            title={xLabel(String(label), true)}
                             items={[...payload]
                               .filter((p) => typeof p.value === 'number')
                               .sort((a, b) => Number(b.value) - Number(a.value))
@@ -349,21 +413,11 @@ export default function PortfoliosView(props: Props) {
             </div>
 
             <div className="mt-4 overflow-x-auto">
-              <table className="w-full min-w-[720px] text-sm" aria-label="Portfolio returns">
+              <table className="w-full min-w-[900px] text-sm" aria-label="Portfolio returns">
                 <thead className="text-xs text-slate-500">
                   <tr className="border-b border-slate-200 dark:border-slate-800">
                     <th className="py-2 text-left font-medium" />
-                    <th className="px-2 py-2 text-right font-medium">YTD</th>
-                    <th className="px-2 py-2 text-right font-medium" title="Last 12 full months">
-                      1Y
-                    </th>
-                    <th className="px-2 py-2 text-right font-medium">ITD</th>
-                    <th className="px-2 py-2 text-right font-medium">ITD / yr</th>
-                    {SHARPE_YEARS.map((y) => (
-                      <th key={y} className="px-2 py-2 text-right font-medium">
-                        Sharpe {y}Y
-                      </th>
-                    ))}
+                    <StatsHeader />
                   </tr>
                 </thead>
                 <tbody className="tabular-nums">
@@ -373,22 +427,7 @@ export default function PortfoliosView(props: Props) {
                       className={`border-b border-slate-100 dark:border-slate-800 ${s.id === COMBINED ? 'font-semibold' : ''} ${s.bench ? 'text-slate-600 dark:text-slate-300' : ''}`}
                     >
                       <td className="py-2 font-semibold">{s.label}</td>
-                      <td className={`px-2 py-2 text-right ${gainColor(s.stats.ytd)}`}>{pct(s.stats.ytd)}</td>
-                      <td className={`px-2 py-2 text-right ${gainColor(s.stats.oneYear)}`}>{pct(s.stats.oneYear)}</td>
-                      <td
-                        className={`px-2 py-2 text-right ${gainColor(s.stats.itd)}`}
-                        title={s.stats.inception ? `Since ${s.stats.inception}` : undefined}
-                      >
-                        {pct(s.stats.itd)}
-                      </td>
-                      <td className={`px-2 py-2 text-right ${gainColor(s.stats.itdAnnualized)}`}>
-                        {pct(s.stats.itdAnnualized)}
-                      </td>
-                      {SHARPE_YEARS.map((y) => (
-                        <td key={y} className="px-2 py-2 text-right">
-                          {s.stats.sharpe[y] === null ? '—' : s.stats.sharpe[y]!.toFixed(2)}
-                        </td>
-                      ))}
+                      <StatsCells r={s} />
                     </tr>
                   ))}
                 </tbody>
@@ -397,7 +436,8 @@ export default function PortfoliosView(props: Props) {
             <p className="mt-2 text-xs text-slate-500">
               Time-weighted price returns from monthly closes (buying/selling doesn’t count as gain; cash and dividends
               excluded). The chart starts each line at 0% from the beginning of the range (or the portfolio’s first
-              month). Sharpe uses a {riskFree}% risk-free rate.
+              month); 1D runs from yesterday’s close in 5-minute steps, 2W uses daily closes. 2Y and 3Y are annualized.
+              Sharpe uses a {riskFree}% risk-free rate.
               {loading.length > 0 && ` Loading ${loading.length} more…`}
             </p>
           </>
