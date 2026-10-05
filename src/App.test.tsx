@@ -373,6 +373,21 @@ describe('App', () => {
     expect(screen.getByRole('region', { name: 'Portfolio summary' })).toHaveTextContent('$2,000.00')
   })
 
+  it('shows the all-funds total for funds that hold only cash', async () => {
+    withKey()
+    const st = JSON.parse(localStorage.getItem('portfolio-tracker:v1')!)
+    st.profiles[0].name = 'Roth I'
+    st.profiles[0].cash = 1500
+    st.profiles.push({ ...st.profiles[0], id: 'p2', name: 'Roth V', cash: 500 })
+    localStorage.setItem('portfolio-tracker:v1', JSON.stringify(st))
+    const user = userEvent.setup()
+    render(<App providerFactory={factory} />)
+    // A cash-only fund still shows its summary, so the cash can be seen and edited.
+    expect(screen.getByRole('region', { name: 'Portfolio summary' })).toHaveTextContent('$1,500.00')
+    await user.click(screen.getByRole('tab', { name: 'All funds (2)' }))
+    expect(screen.getByRole('region', { name: 'All funds summary' })).toHaveTextContent('$2,000.00')
+  })
+
   it('shows the market heat map and top 20 gainers/losers among large caps', async () => {
     withKey()
     // every symbol gets a price; % change depends on the ticker so ordering is deterministic
