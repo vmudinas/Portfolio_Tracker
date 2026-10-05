@@ -446,7 +446,7 @@ function App({ providerFactory = createFinnhubProvider, historyFactory = createT
           persisted={backup.persisted}
           onBackedUp={backup.markBackedUp}
           onRestore={(next, restoredTheme) => {
-            backup.markRestored()
+            backup.markRestored(next)
             dispatch({ type: 'state/replace', state: next })
             if (restoredTheme) setTheme(restoredTheme)
           }}

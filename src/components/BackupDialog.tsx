@@ -1,5 +1,13 @@
 import { useRef, useState } from 'react'
-import { backupFileName, createBackup, downloadText, mergeKeys, readBackup, type ParsedBackup } from '../lib/backup'
+import {
+  backupFileName,
+  createBackup,
+  downloadText,
+  hasBackupData,
+  mergeKeys,
+  readBackup,
+  type ParsedBackup,
+} from '../lib/backup'
 import type { Theme } from '../hooks/useTheme'
 import type { AppState } from '../types'
 import { Button, Modal } from './ui'
@@ -128,9 +136,10 @@ export function BackupDialog(props: Props) {
                 </li>
                 <li>{s.hasKeys ? 'Includes API keys' : 'No API keys (this browser’s keys are kept)'}</li>
               </ul>
-              {current > 0 && (
+              {hasBackupData(state.profiles) && (
                 <p className="mt-2 text-xs text-amber-700 dark:text-amber-400">
-                  This replaces everything currently in this browser ({current} transactions).
+                  This replaces everything currently in this browser ({current} transactions, plus cash, watchlists and
+                  alerts).
                 </p>
               )}
               <div className="mt-3 flex gap-2">

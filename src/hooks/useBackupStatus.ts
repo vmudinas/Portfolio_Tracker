@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { AppState } from '../types'
+import { hasBackupData } from '../lib/backup'
+import type { AppState, Profile } from '../types'
 
 const KEY = 'portfolio-tracker:backup-status'
 const REMIND_AFTER_MS = 7 * 86_400_000
@@ -28,7 +29,7 @@ function write(s: Status) {
   }
 }
 
-const dataFingerprint = (state: AppState) => JSON.stringify(state.profiles)
+const dataFingerprint = (profiles: Profile[]) => JSON.stringify(profiles)
 
 /**
  * Tracks when data last changed vs. when it was last backed up, and asks the browser to
@@ -37,19 +38,21 @@ const dataFingerprint = (state: AppState) => JSON.stringify(state.profiles)
 export function useBackupStatus(state: AppState) {
   const [status, setStatus] = useState<Status>(read)
   const [persisted, setPersisted] = useState<boolean | null>(null)
-  const fingerprint = dataFingerprint(state)
+  const fingerprint = dataFingerprint(state.profiles)
   const first = useRef(fingerprint)
-  const skipNext = useRef(false)
-  const hasData = state.profiles.some((p) => p.lots.length + p.sales.length + p.dividends.length > 0)
+  /** Fingerprint of a backup that is about to be restored; that one change isn't an edit. */
+  const restoredFingerprint = useRef<string | null>(null)
+  const hasData = hasBackupData(state.profiles)
 
   useEffect(() => {
     if (fingerprint === first.current) return
     first.current = fingerprint
-    // Data that was just restored from a backup is, by definition, backed up.
-    if (skipNext.current) {
-      skipNext.current = false
-      return
-    }
+    // Data that was just restored from a backup is, by definition, backed up. The skip is
+    // tied to the restored data and used up by the first change either way, so an identical
+    // restore (no change at all) can't swallow a later real edit.
+    const restored = restoredFingerprint.current === fingerprint
+    restoredFingerprint.current = null
+    if (restored) return
     const next = { ...read(), changedAt: new Date().toISOString() }
     write(next)
     setStatus(next)
@@ -75,10 +78,13 @@ export function useBackupStatus(state: AppState) {
   }, [])
 
   /** Call right before replacing the state with a restored backup. */
-  const markRestored = useCallback(() => {
-    skipNext.current = true
-    markBackedUp()
-  }, [markBackedUp])
+  const markRestored = useCallback(
+    (restored: AppState) => {
+      restoredFingerprint.current = dataFingerprint(restored.profiles)
+      markBackedUp()
+    },
+    [markBackedUp],
+  )
 
   const snooze = useCallback(() => {
     const next = { ...read(), snoozeUntil: new Date(Date.now() + REMIND_AFTER_MS).toISOString() }

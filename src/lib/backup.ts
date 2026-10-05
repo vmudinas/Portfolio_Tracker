@@ -1,5 +1,5 @@
 import type { Theme } from '../hooks/useTheme'
-import type { AppState } from '../types'
+import type { AppState, Profile } from '../types'
 import { parseState } from './storage'
 
 export const BACKUP_APP = 'portfolio-tracker'
@@ -87,4 +87,20 @@ export function downloadText(text: string, type: string, name: string) {
   a.download = name
   a.click()
   setTimeout(() => URL.revokeObjectURL(url), 1000)
+}
+
+const DEFAULT_NAME = 'My portfolio'
+
+/**
+ * True when the profiles hold anything a backup would preserve: transactions, cash, watchlist,
+ * alerts, extra profiles or a renamed profile. A single untouched default profile is not data.
+ */
+export function hasBackupData(profiles: Profile[]): boolean {
+  if (profiles.length > 1) return true
+  return profiles.some(
+    (p) =>
+      p.lots.length + p.sales.length + p.dividends.length + p.watchlist.length + p.alerts.length > 0 ||
+      p.cash !== 0 ||
+      p.name !== DEFAULT_NAME,
+  )
 }
