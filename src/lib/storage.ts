@@ -124,6 +124,9 @@ export function parseState(raw: unknown): AppState | null {
     ...(typeof s.twelveDataApiKey === 'string' && s.twelveDataApiKey.trim()
       ? { twelveDataApiKey: s.twelveDataApiKey.trim() }
       : {}),
+    ...(typeof s.alphaVantageApiKey === 'string' && s.alphaVantageApiKey.trim()
+      ? { alphaVantageApiKey: s.alphaVantageApiKey.trim() }
+      : {}),
     ...(typeof s.showTrends === 'boolean' ? { showTrends: s.showTrends } : {}),
     ...(Number.isFinite(Number(s.riskFreeRate)) && s.riskFreeRate !== null && s.riskFreeRate !== ''
       ? { riskFreeRate: Math.min(25, Math.max(0, Number(s.riskFreeRate))) }

@@ -13,6 +13,9 @@ import { ThemeToggle } from './components/ThemeToggle'
 import { TransactionForm, type TxEditing, type TxSave } from './components/TransactionForm'
 import { Button, Tabs } from './components/ui'
 import { WatchlistPanel } from './components/WatchlistPanel'
+import { HeatMap } from './components/market/HeatMap'
+import { TopMovers } from './components/market/TopMovers'
+import { useMarketBoard } from './hooks/useMarketBoard'
 import { describeAlert, useAlerts } from './hooks/useAlerts'
 import { useBackupStatus } from './hooks/useBackupStatus'
 import { useExtendedHours } from './hooks/useExtendedHours'
@@ -32,9 +35,10 @@ import type { Dividend, Lot, Sale } from './types'
 
 // Charts (and the charting library) load only when opened, keeping the first page load small.
 const ChartsPanel = lazy(() => import('./components/charts/ChartsPanel'))
+const PortfoliosView = lazy(() => import('./components/charts/PortfoliosView'))
 type ChartRequest = { id: number; view: 'compare' | 'returns'; symbols?: string[] }
 
-type Tab = 'holdings' | 'activity' | 'watchlist'
+type Tab = 'holdings' | 'activity' | 'watchlist' | 'portfolios' | 'heatmap' | 'movers'
 
 interface Props {
   /** Injected in tests; defaults to Finnhub with the user's key. */
@@ -70,9 +74,11 @@ function App({ providerFactory = createFinnhubProvider, historyFactory = createT
           ...profile.lots.map((l) => l.symbol),
           ...profile.watchlist,
           ...profile.alerts.filter((a) => !a.triggeredAt).map((a) => a.symbol),
+          // The Portfolios tab values every profile, so it needs their prices too.
+          ...(tab === 'portfolios' ? state.profiles.flatMap((p) => p.lots.map((l) => l.symbol)) : []),
         ]),
       ].sort(),
-    [profile.lots, profile.watchlist, profile.alerts],
+    [profile.lots, profile.watchlist, profile.alerts, tab, state.profiles],
   )
   const market = useMarketStatus(provider)
   const session = market?.session ?? null
@@ -82,6 +88,7 @@ function App({ providerFactory = createFinnhubProvider, historyFactory = createT
     state.settings.refreshSeconds,
     session,
   )
+  const board = useMarketBoard(provider, session, tab === 'heatmap' || tab === 'movers')
   const extendedAll = useExtendedHours(symbols, provider, session)
   const extended = useMemo(() => visibleExtended(extendedAll, quotes, session), [extendedAll, quotes, session])
 
@@ -239,13 +246,7 @@ function App({ providerFactory = createFinnhubProvider, historyFactory = createT
           </div>
         ))}
 
-        {!hasActivity && tab === 'holdings' ? (
-          <EmptyState
-            onAdd={() => setEditing({ kind: 'buy' })}
-            onLoadSample={loadSample}
-            onRestore={() => setBackupOpen(true)}
-          />
-        ) : (
+        {hasActivity && (
           <>
             <SummaryCards summary={summary} onEditCash={() => setCashOpen(true)} />
             <div className="flex flex-wrap items-center justify-between gap-2">
@@ -297,7 +298,7 @@ function App({ providerFactory = createFinnhubProvider, historyFactory = createT
           </>
         )}
 
-        {(hasActivity || tab !== 'holdings') && (
+        {
           <>
             <Tabs
               label="Sections"
@@ -307,8 +308,18 @@ function App({ providerFactory = createFinnhubProvider, historyFactory = createT
                 { id: 'holdings', label: `Holdings (${positions.length})` },
                 { id: 'activity', label: 'Activity' },
                 { id: 'watchlist', label: `Watchlist & alerts${watchCount ? ` (${watchCount})` : ''}` },
+                { id: 'portfolios', label: 'Portfolios' },
+                { id: 'heatmap', label: 'Heat map' },
+                { id: 'movers', label: 'Top movers' },
               ]}
             />
+            {tab === 'holdings' && !hasActivity && (
+              <EmptyState
+                onAdd={() => setEditing({ kind: 'buy' })}
+                onLoadSample={loadSample}
+                onRestore={() => setBackupOpen(true)}
+              />
+            )}
             {tab === 'holdings' && selected.length > 0 && (
               <SelectionBar
                 positions={positions.filter((p) => selected.includes(p.symbol))}
@@ -321,6 +332,7 @@ function App({ providerFactory = createFinnhubProvider, historyFactory = createT
               />
             )}
             {tab === 'holdings' &&
+              hasActivity &&
               (positions.length ? (
                 <HoldingsTable
                   selected={selected}
@@ -355,8 +367,50 @@ function App({ providerFactory = createFinnhubProvider, historyFactory = createT
                 onRearm={(id) => dispatch({ type: 'alert/rearm', id })}
               />
             )}
+            {tab === 'portfolios' && (
+              <Suspense fallback={<p className="text-sm text-slate-500">Loading…</p>}>
+                <PortfoliosView
+                  profiles={state.profiles}
+                  activeId={profile.id}
+                  quotes={quotes}
+                  extended={extended}
+                  regularPrices={regularPrices}
+                  riskFree={state.settings.riskFreeRate ?? DEFAULT_RISK_FREE}
+                  provider={historyProvider}
+                  onSwitch={(id) => {
+                    dispatch({ type: 'profile/switch', id })
+                    setTab('holdings')
+                  }}
+                  onOpenSettings={() => setSettingsOpen(true)}
+                />
+              </Suspense>
+            )}
+            {tab === 'heatmap' &&
+              (provider ? (
+                <HeatMap
+                  board={board}
+                  owned={positions.map((p) => p.symbol)}
+                  watchlist={profile.watchlist}
+                  onWatch={(symbol) => dispatch({ type: 'watchlist/add', symbol })}
+                  onBuy={(symbol) => setEditing({ kind: 'buy', symbol })}
+                />
+              ) : (
+                <p className="py-8 text-center text-sm text-slate-500">
+                  Add your Finnhub API key in Settings to load the heat map.
+                </p>
+              ))}
+            {tab === 'movers' && (
+              <TopMovers
+                board={board}
+                alphaVantageKey={state.settings.alphaVantageApiKey}
+                owned={positions.map((p) => p.symbol)}
+                watchlist={profile.watchlist}
+                onWatch={(symbol) => dispatch({ type: 'watchlist/add', symbol })}
+                onOpenSettings={() => setSettingsOpen(true)}
+              />
+            )}
           </>
-        )}
+        }
       </main>
 
       <footer className="mt-10 text-xs text-slate-500">

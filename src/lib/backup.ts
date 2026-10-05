@@ -21,8 +21,8 @@ export interface ParsedBackup {
 
 /** Full backup of every profile and setting. API keys only when asked for. */
 export function createBackup(state: AppState, opts: { includeKeys?: boolean; theme?: Theme } = {}): string {
-  const { finnhubApiKey, twelveDataApiKey, ...rest } = state.settings
-  const settings = opts.includeKeys ? { ...rest, finnhubApiKey, twelveDataApiKey } : rest
+  const { finnhubApiKey, twelveDataApiKey, alphaVantageApiKey, ...rest } = state.settings
+  const settings = opts.includeKeys ? { ...rest, finnhubApiKey, twelveDataApiKey, alphaVantageApiKey } : rest
   return JSON.stringify(
     {
       app: BACKUP_APP,
@@ -43,7 +43,7 @@ export function summarize(state: AppState, exportedAt: string | null = null): Ba
     watchlist: state.profiles.reduce((n, p) => n + p.watchlist.length, 0),
     alerts: state.profiles.reduce((n, p) => n + p.alerts.length, 0),
     exportedAt,
-    hasKeys: !!(state.settings.finnhubApiKey || state.settings.twelveDataApiKey),
+    hasKeys: !!(state.settings.finnhubApiKey || state.settings.twelveDataApiKey || state.settings.alphaVantageApiKey),
   }
 }
 
@@ -71,6 +71,7 @@ export function mergeKeys(restored: AppState, current: AppState): AppState {
       ...restored.settings,
       finnhubApiKey: restored.settings.finnhubApiKey ?? current.settings.finnhubApiKey,
       twelveDataApiKey: restored.settings.twelveDataApiKey ?? current.settings.twelveDataApiKey,
+      alphaVantageApiKey: restored.settings.alphaVantageApiKey ?? current.settings.alphaVantageApiKey,
     },
   }
 }

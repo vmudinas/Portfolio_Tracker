@@ -16,6 +16,9 @@ Enter a stock symbol, how many shares you bought, and the price you paid. Portfo
 - **Charts** (optional) — allocation donut (by stock or industry), portfolio performance vs the S&P 500 (time-weighted), and stock comparison
 - **Select & compare** — tick several holdings for their combined value, cost, gain, today’s move, realized gain and dividends; jump to a comparison chart
 - **Returns & Sharpe** — YTD, 1-year, inception-to-date (and annualized), Sharpe ratio over 1/2/3/5 years, for the whole portfolio, your selection, each holding and the S&P 500; month-by-month returns for every year
+- **Portfolios tab** — compare all your portfolios (profiles) side by side: value, cost, gains, dividends, YTD/1Y/ITD, Sharpe, growth chart vs the S&P 500, and a combined total of any you tick
+- **Heat map** — the ~100 largest US companies sized by market cap, grouped by sector, coloured by today’s move
+- **Top movers** — top 20 gainers and losers among large caps, or across the whole US market (free Alpha Vantage key)
 - **Watchlist & price alerts** — follow stocks you don’t own; get a browser notification when a price crosses your target (while the site is open)
 - **Backup & restore** — one-click backup file of everything (optionally with API keys); restore it after clearing browser data or on a new device, with a preview first. A reminder appears when you have changes that aren’t backed up.
 - **CSV import/export** — import broker activity exports (Fidelity, Schwab, Robinhood-style) or your own export

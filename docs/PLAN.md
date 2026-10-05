@@ -169,6 +169,12 @@ No secrets are needed — there is no server and no committed API key.
 - **Holding returns**: month-over-month price returns; ITD = latest price ÷ your first purchase price − 1. **Benchmark** (SPY) ITD aligned to the portfolio’s first month.
 - **Stats**: YTD (compounded months this year), 1Y (last 12 full months), ITD and annualized ITD (≥ 1 year), Sharpe = mean excess monthly return ÷ sample stdev × √12 over the last 12/24/36/60 full months (shown only when available). Risk-free rate configurable in Settings (default 4.0% ≈ 3-month T-bill, Fed H.15, 2026-10-01).
 
+## 7d. Portfolios comparison, heat map, top movers (added 2026-10-04)
+
+- **Portfolios tab**: every profile with live totals (value incl. cash, cost, unrealized, today, realized, dividends, total return) plus a combined row for ticked profiles; monthly TWR per profile → growth chart vs SPY (each line starts at 0%) and YTD/1Y/ITD/Sharpe table. Quotes for all profiles’ holdings load while the tab is open.
+- **Heat map**: fixed universe of ~100 largest US companies (≈ S&P 100) by GICS sector with market caps snapshotted from Finnhub on 2026-10-04 (`src/lib/marketUniverse.ts` — refresh occasionally). Custom squarified treemap (`src/lib/treemap.ts`). Quotes via Finnhub at ≤ 40/min (separate limiter) so portfolio refresh keeps headroom; refresh every 5 min in the regular session, cached otherwise. Index ETFs SPY/QQQ/DIA/IWM on top.
+- **Top movers**: large caps = sort of the heat-map quotes (top 20 up / down); whole market = Alpha Vantage `TOP_GAINERS_LOSERS` (free key, 25/day, cached 15 min, optional “hide < $5”).
+
 ## 8. Testing
 
 | Level          | Tool                    | What                                                             |

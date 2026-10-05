@@ -29,6 +29,7 @@ export function SettingsDialog({
 }: Props) {
   const [apiKey, setApiKey] = useState(state.settings.finnhubApiKey ?? '')
   const [tdKey, setTdKey] = useState(state.settings.twelveDataApiKey ?? '')
+  const [avKey, setAvKey] = useState(state.settings.alphaVantageApiKey ?? '')
   const [showKey, setShowKey] = useState(false)
   const [refresh, setRefresh] = useState(String(state.settings.refreshSeconds))
   const [riskFree, setRiskFree] = useState(String(state.settings.riskFreeRate ?? DEFAULT_RISK_FREE))
@@ -42,6 +43,7 @@ export function SettingsDialog({
     onSave({
       finnhubApiKey: apiKey.trim() || undefined,
       twelveDataApiKey: tdKey.trim() || undefined,
+      alphaVantageApiKey: avKey.trim() || undefined,
       refreshSeconds: Number(refresh),
       riskFreeRate:
         Number.isFinite(Number(riskFree)) && riskFree.trim() !== ''
@@ -129,6 +131,33 @@ export function SettingsDialog({
             value={tdKey}
             onChange={(e) => setTdKey(e.target.value)}
             placeholder="Paste your Twelve Data key"
+            autoComplete="off"
+            spellCheck={false}
+          />
+        </Field>
+        <Field
+          label="Alpha Vantage API key (optional, for whole-market top movers)"
+          hint={
+            <>
+              Free at{' '}
+              <a
+                className="text-teal-700 underline dark:text-teal-400"
+                href="https://www.alphavantage.co/support/#api-key"
+                target="_blank"
+                rel="noreferrer"
+              >
+                alphavantage.co
+              </a>{' '}
+              (25 requests/day; the list is cached 15 minutes).
+            </>
+          }
+        >
+          <input
+            className={inputClass}
+            type={showKey ? 'text' : 'password'}
+            value={avKey}
+            onChange={(e) => setAvKey(e.target.value)}
+            placeholder="Paste your Alpha Vantage key"
             autoComplete="off"
             spellCheck={false}
           />

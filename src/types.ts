@@ -97,6 +97,8 @@ export interface Settings {
   finnhubApiKey?: string
   /** Optional Twelve Data key — enables the trends chart (price history). */
   twelveDataApiKey?: string
+  /** Optional Alpha Vantage key — whole-market top gainers/losers. */
+  alphaVantageApiKey?: string
   refreshSeconds: number
   showTrends?: boolean
   /** Annual risk-free rate in % used for Sharpe ratios (e.g. 3-month T-bill). */
