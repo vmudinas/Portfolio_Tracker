@@ -8,6 +8,7 @@ Enter a stock symbol, how many shares you bought, and the price you paid. Portfo
 
 ## Features
 
+- **Cloud sync (Supabase, optional)** — sign in with email + password and your funds, transactions, watchlists, alerts, settings and API keys are saved to your account and synced across devices (free tier; see [docs/SUPABASE_SETUP.md](docs/SUPABASE_SETUP.md)). Without it, the app runs local-only with the PIN lock below.
 - **Login** — a home page with a username + PIN login in front of the whole app. You create the login on the first visit (username defaults to `admin`); only a salted hash of the PIN is stored, in your browser. Locks after 15 minutes idle, when the tab closes, or with the Lock button; change it in Settings.
 - **Holdings** — add buys (multiple lots per stock), see price, value, weight, gain/loss $ and %, today’s change, holding period and annualized return
 - **Sells & realized gains** — FIFO matching against your oldest shares; realized gain per sale and in total

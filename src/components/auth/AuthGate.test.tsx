@@ -24,7 +24,6 @@ const Secret = ({ lock }: { lock: () => void }) => (
 const renderGate = () => render(<AuthGate>{(lock) => <Secret lock={lock} />}</AuthGate>)
 
 afterEach(() => {
-  sessionStorage.clear()
   vi.useRealTimers()
 })
 

@@ -31,6 +31,8 @@ import type { QuoteProvider } from './providers/QuoteProvider'
 import { createTwelveDataProvider } from './providers/twelveData'
 import { activeProfile } from './state/reducer'
 import { useAppState } from './state/useAppState'
+import { SyncBadge, SyncNotice } from './sync/SyncBadge'
+import { useSync } from './sync/SyncContext'
 import type { Dividend, Lot, Sale } from './types'
 
 // Charts (and the charting library) load only when opened, keeping the first page load small.
@@ -50,6 +52,7 @@ interface Props {
 
 function App({ providerFactory = createFinnhubProvider, historyFactory = createTwelveDataProvider, onLock }: Props) {
   const [state, dispatch] = useAppState()
+  const sync = useSync()
   const [theme, setTheme] = useTheme()
   const [editing, setEditing] = useState<TxEditing | null>(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
@@ -216,6 +219,7 @@ function App({ providerFactory = createFinnhubProvider, historyFactory = createT
             onRename={(id, name) => dispatch({ type: 'profile/rename', id, name })}
             onDelete={(id) => dispatch({ type: 'profile/delete', id })}
           />
+          <SyncBadge />
           <ThemeToggle theme={theme} onChange={setTheme} />
           <Button aria-label="Backup and restore" title="Backup & restore" onClick={() => setBackupOpen(true)}>
             ⤓<span className="hidden sm:inline">Backup</span>
@@ -223,11 +227,16 @@ function App({ providerFactory = createFinnhubProvider, historyFactory = createT
           <Button aria-label="Settings" title="Settings" onClick={() => setSettingsOpen(true)}>
             ⚙<span className="hidden sm:inline">Settings</span>
           </Button>
-          {onLock && (
-            <Button aria-label="Lock" title="Lock (log out)" onClick={onLock}>
-              🔒<span className="hidden sm:inline">Lock</span>
-            </Button>
-          )}
+          {onLock &&
+            (sync ? (
+              <Button aria-label="Sign out" title={`Sign out (${sync.user.email})`} onClick={onLock}>
+                ⎋<span className="hidden sm:inline">Sign out</span>
+              </Button>
+            ) : (
+              <Button aria-label="Lock" title="Lock (log out)" onClick={onLock}>
+                🔒<span className="hidden sm:inline">Lock</span>
+              </Button>
+            ))}
         </div>
       </header>
 
@@ -240,7 +249,8 @@ function App({ providerFactory = createFinnhubProvider, historyFactory = createT
             </Button>
           </div>
         )}
-        {backup.needsBackup && (
+        <SyncNotice />
+        {backup.needsBackup && !sync && (
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-sky-300 bg-sky-50 px-4 py-3 text-sm text-sky-900 dark:border-sky-800 dark:bg-sky-950/40 dark:text-sky-100">
             <span>
               {backup.lastBackupAt
@@ -478,8 +488,8 @@ function App({ providerFactory = createFinnhubProvider, historyFactory = createT
       </main>
 
       <footer className="mt-10 text-xs text-slate-500">
-        Data stays in this browser. Prices from Finnhub (may be delayed); history from Twelve Data. Not financial
-        advice.
+        {sync ? 'Data is saved to your account.' : 'Data stays in this browser.'} Prices from Finnhub (may be delayed);
+        history from Twelve Data. Not financial advice.
       </footer>
 
       {editing && (

@@ -219,3 +219,12 @@ No secrets are needed — there is no server and no committed API key.
 - Session in sessionStorage: survives reloads, ends when the tab closes, after 15 minutes without activity, or on Lock.
 - 5 free attempts, then 30 s, 60 s, 120 s… between tries. "Forgot your PIN?" can only erase this browser's data (then restore a backup).
 - Limits: this is a lock screen for a client-only app, not encryption — someone with access to the browser's developer tools could still read the stored data. Encrypting the data with the PIN is a possible follow-up.
+
+## 7i. Cloud sync with Supabase (added 2026-10-06)
+
+- Optional: enabled when the build has `VITE_SUPABASE_URL` + `VITE_SUPABASE_PUBLISHABLE_KEY` (GitHub repository variables `SUPABASE_URL` / `SUPABASE_PUBLISHABLE_KEY`). Without them the app is local-only with the PIN lock.
+- Auth: Supabase email + password (sign up with email confirmation, password reset by email, change password in Settings). Replaces the PIN lock in cloud mode. Session in sessionStorage: ends on tab close, 15 min idle, or Sign out.
+- Data: one row per user in `portfolio_state` (`data jsonb`, `revision int`), Row Level Security = own row only (`supabase/schema.sql`). Whole AppState incl. API keys.
+- Sync: debounced save (~1 s) with optimistic `revision` check; if another device saved first the newer cloud copy is loaded and the user is told to redo the last change. Retries offline/errors with backoff and on `online`; pulls newer data when the tab becomes visible. Header badge: Saved / Saving… / Offline / Not saved.
+- First sign-in: existing browser data is uploaded to a new account; if both the browser and the account have different data the user picks which to keep (with a backup download offered). The old localStorage copy is removed; the working copy lives in sessionStorage and is cleared on sign-out.
+- Free-tier caveat: projects pause after a week without activity (restore in the dashboard).
