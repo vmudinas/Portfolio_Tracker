@@ -199,8 +199,7 @@ export function SettingsDialog({
           </Button>
         </div>
 
-        <AccountSettings />
-        <LoginSettings />
+        {sync ? <AccountSettings /> : <LoginSettings />}
 
         <hr className="border-slate-200 dark:border-slate-800" />
 

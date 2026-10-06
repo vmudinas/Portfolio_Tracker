@@ -75,6 +75,35 @@ describe('CloudGate', () => {
     expect(sessionStorage.getItem(STORAGE_KEY)).toBeNull()
   })
 
+  it('never shows or uploads one account’s unsaved edits under another account', async () => {
+    const OTHER = 'other@example.com'
+    const f = fakeCloud({ [EMAIL]: PW, [OTHER]: PW })
+    const user = userEvent.setup()
+    renderGate(f)
+    await logIn(user)
+    expect(await screen.findByText('Cash: 0')).toBeInTheDocument()
+    // Edit while saving fails (offline), then sign out: the edit is kept for this account only.
+    f.setFailSaves(true)
+    await user.click(screen.getByRole('button', { name: 'Add cash' }))
+    await user.click(screen.getByRole('button', { name: 'Sign out' }))
+    expect(await screen.findByRole('form', { name: 'Log in' })).toBeInTheDocument()
+    f.setFailSaves(false)
+
+    // A different account signs in on the same tab: starts clean, the first account's data isn't used.
+    await user.type(screen.getByLabelText('Email'), OTHER)
+    await user.type(screen.getByLabelText('Password'), PW)
+    await user.click(screen.getByRole('button', { name: 'Log in' }))
+    expect(await screen.findByText('Cash: 0')).toBeInTheDocument()
+    expect(screen.queryByRole('group', { name: 'Choose data' })).not.toBeInTheDocument()
+    expect((f.rows.get(`id-${OTHER}`)!.data as AppState).profiles[0].cash).toBe(0)
+    await user.click(screen.getByRole('button', { name: 'Sign out' }))
+
+    // The first account gets its unsaved edit back and uploaded.
+    await logIn(user)
+    expect(await screen.findByText('Cash: 100')).toBeInTheDocument()
+    expect((f.rows.get(UID)!.data as AppState).profiles[0].cash).toBe(100)
+  })
+
   it('loads the account’s data on a new device', async () => {
     const f = fakeCloud({ [EMAIL]: PW })
     f.rows.set(UID, { data: withCash(1234), revision: 7 })

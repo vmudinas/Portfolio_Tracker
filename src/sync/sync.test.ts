@@ -120,6 +120,25 @@ describe('SyncEngine', () => {
     expect(f.rows.get(UID)?.data).toEqual(withCash(9))
   })
 
+  it('keeps the edit pending if loading the newer cloud data fails after a conflict', async () => {
+    const { f, engine } = await setup()
+    f.remoteWrite(UID, withCash(777))
+    f.setFailLoads(true)
+    engine.save(withCash(5))
+    await vi.advanceTimersByTimeAsync(1300)
+    expect(engine.hasUnsaved).toBe(true)
+    expect(engine.status).toBe('error')
+    expect(engine.notice).toBeNull()
+    // Network back: the retry hits the conflict again, now loads the newer data and only then drops the edit.
+    f.setFailLoads(false)
+    const seen: AppState[] = []
+    engine.onRemote((st) => seen.push(st))
+    await vi.advanceTimersByTimeAsync(5100)
+    expect(seen).toEqual([withCash(777)])
+    expect(engine.hasUnsaved).toBe(false)
+    expect(engine.notice).toMatch(/changed on another device/)
+  })
+
   it('flush saves immediately (used before signing out)', async () => {
     const { f, engine } = await setup()
     engine.save({ ...BASE, profiles: [...BASE.profiles, createProfile('Roth I')] })

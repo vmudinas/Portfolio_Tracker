@@ -8,6 +8,7 @@ export function fakeCloud(accounts: Record<string, string> = {}) {
   const users = new Map(Object.entries(accounts).map(([email, pw]) => [email, { pw, id: `id-${email}` }]))
   const calls = { save: 0, load: 0 }
   let failSaves = false
+  let failLoads = false
 
   const cloud: Cloud = {
     auth: {
@@ -41,6 +42,7 @@ export function fakeCloud(accounts: Record<string, string> = {}) {
     store: {
       async load(userId) {
         calls.load++
+        if (failLoads) throw new TypeError('Failed to fetch')
         const r = rows.get(userId)
         return r ? structuredClone(r) : null
       },
@@ -64,6 +66,7 @@ export function fakeCloud(accounts: Record<string, string> = {}) {
     rows,
     calls,
     setFailSaves: (v: boolean) => (failSaves = v),
+    setFailLoads: (v: boolean) => (failLoads = v),
     /** Simulate another device saving. */
     remoteWrite(userId: string, data: unknown) {
       const r = rows.get(userId)

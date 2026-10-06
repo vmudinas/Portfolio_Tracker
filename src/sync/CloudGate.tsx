@@ -5,7 +5,7 @@ import { endSession, sessionActive, touchSession } from '../lib/auth'
 import { clearSessionState, readStoredState, removeLegacyLocalState, saveState, setStateStorage } from '../lib/storage'
 import type { AppState } from '../types'
 import { ChoiceCard, NewPasswordCard, SignInCard } from './CloudForms'
-import { clearMeta, readMeta, SyncEngine } from './engine'
+import { clearMeta, clearStash, readAnyMeta, readMeta, readStash, stashUnsaved, SyncEngine } from './engine'
 import { reconcile } from './reconcile'
 import { SyncContext, type SyncSession } from './SyncContext'
 import type { Cloud, CloudUser } from './types'
@@ -65,11 +65,14 @@ export function CloudGate({
     async (c: Cloud, notice?: string) => {
       const engine = engineRef.current
       if (engine) await engine.flush()
-      // Keep unsaved edits in this tab so they upload on the next login; otherwise wipe the local copy.
-      if (!engine?.hasUnsaved) {
-        clearSessionState()
-        clearMeta()
-      }
+      // Edits that couldn't be saved (e.g. offline) are kept for this user only, so they upload on
+      // their next login in this tab. The shared working copy is always wiped.
+      const meta = engine ? readMeta(engine.userId) : readAnyMeta()
+      const tab = readStoredState('session')
+      const unsaved = engine ? engine.hasUnsaved : !!(tab && meta && JSON.stringify(tab) !== meta.synced)
+      if (unsaved && tab && meta) stashUnsaved(meta.userId, { state: tab, meta })
+      clearSessionState()
+      clearMeta()
       finishSignOut(notice)
       await c.auth.signOut().catch(() => {})
     },
@@ -80,6 +83,7 @@ export function CloudGate({
     (c: Cloud, user: CloudUser, state: AppState, revision: number) => {
       saveState(state)
       removeLegacyLocalState()
+      clearStash(user.id)
       engineRef.current?.dispose()
       const engine = new SyncEngine(c.store, user.id, { revision, state })
       engineRef.current = engine
@@ -107,9 +111,17 @@ export function CloudGate({
         // Retry a couple of times if another device saves between our load and upload.
         for (let attempt = 0; attempt < 3; attempt++) {
           const remote = await c.store.load(user.id)
-          const tabCopy = readStoredState('session')
-          const local = tabCopy ?? readStoredState('local')
-          const plan = reconcile(remote, local, tabCopy ? readMeta(user.id) : null)
+          // Only this user's own edits from this tab count — never another account's leftovers.
+          const stash = readStash(user.id)
+          const meta = readMeta(user.id)
+          const tab = readStoredState('session')
+          const mine = stash ?? (tab && meta ? { state: tab, meta } : null)
+          if (tab && !meta) {
+            clearSessionState()
+            clearMeta()
+          }
+          const local = mine?.state ?? readStoredState('local')
+          const plan = reconcile(remote, local, mine?.meta ?? null)
           if (plan.kind === 'ask') {
             setPhase({ kind: 'ask', user, local: plan.local, remote: plan.remote, revision: plan.revision })
             return

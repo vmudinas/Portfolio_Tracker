@@ -14,12 +14,54 @@ export interface SyncMeta {
   synced: string
 }
 
-export function readMeta(userId: string): SyncMeta | null {
+/** The sync record of whoever last used this tab (any user). */
+export function readAnyMeta(): SyncMeta | null {
   try {
     const m = JSON.parse(sessionStorage.getItem(META_KEY) ?? 'null') as SyncMeta | null
-    return m && m.userId === userId && typeof m.synced === 'string' ? m : null
+    return m && typeof m.userId === 'string' && typeof m.synced === 'string' ? m : null
   } catch {
     return null
+  }
+}
+
+export function readMeta(userId: string): SyncMeta | null {
+  const m = readAnyMeta()
+  return m && m.userId === userId ? m : null
+}
+
+// ---- Unsaved edits kept per user after signing out (e.g. offline), so they upload on that user's next
+// login in this tab — and are never shown to, or uploaded by, a different account.
+
+const STASH_PREFIX = 'portfolio-tracker:unsaved:'
+
+export interface Stash {
+  state: unknown
+  meta: SyncMeta
+}
+
+export function stashUnsaved(userId: string, s: Stash) {
+  try {
+    sessionStorage.setItem(STASH_PREFIX + userId, JSON.stringify(s))
+  } catch {
+    /* ignore */
+  }
+}
+
+export function readStash(userId: string): { state: AppState; meta: SyncMeta } | null {
+  try {
+    const s = JSON.parse(sessionStorage.getItem(STASH_PREFIX + userId) ?? 'null') as Stash | null
+    const state = s && parseState(s.state)
+    return state && s.meta?.userId === userId ? { state, meta: s.meta } : null
+  } catch {
+    return null
+  }
+}
+
+export function clearStash(userId: string) {
+  try {
+    sessionStorage.removeItem(STASH_PREFIX + userId)
+  } catch {
+    /* ignore */
   }
 }
 
@@ -61,7 +103,7 @@ export class SyncEngine {
   private remoteListeners = new Set<(s: AppState) => void>()
 
   private store: CloudStore
-  private userId: string
+  readonly userId: string
 
   constructor(store: CloudStore, userId: string, initial: { revision: number; state: AppState }) {
     this.store = store
@@ -125,7 +167,7 @@ export class SyncEngine {
 
   private async doSave(json: string) {
     try {
-      const res = await this.store.save(this.userId, JSON.parse(json), this.revision)
+      const res = await this.store.save(this.userId, JSON.parse(json), this.revision > 0 ? this.revision : null)
       if (res.status === 'ok') {
         this.revision = res.revision
         this.synced = json
@@ -136,36 +178,52 @@ export class SyncEngine {
         if (this.pending) this.schedule(DEBOUNCE_MS)
         return
       }
-      // Someone (another device or tab) saved first: take the newer cloud data.
+      // Someone (another device or tab) saved first: take the newer cloud data — but keep our edit
+      // pending until that data has actually been loaded, so a failed load doesn't lose it.
+      const pulled = await this.pull(true)
+      if (pulled === 'failed') return this.failed()
+      if (pulled === 'missing') return this.schedule(0) // row was deleted: save again to recreate it
       this.pending = null
-      await this.pull(true)
+      this.retry = 0
       this.set(
         'saved',
         'Your data was changed on another device, so the latest version was loaded. Your last change here was not saved — please redo it.',
       )
     } catch {
-      const offline = typeof navigator !== 'undefined' && navigator.onLine === false
-      this.set(offline ? 'offline' : 'error')
-      this.schedule(RETRY_MS[Math.min(this.retry++, RETRY_MS.length - 1)])
+      this.failed()
     }
   }
 
-  /** Load the cloud copy and apply it if it is newer than ours (and we have no unsaved edits). */
-  async pull(force = false) {
-    if (this.pending && !force) return
+  private failed() {
+    const offline = typeof navigator !== 'undefined' && navigator.onLine === false
+    this.set(offline ? 'offline' : 'error')
+    this.schedule(RETRY_MS[Math.min(this.retry++, RETRY_MS.length - 1)])
+  }
+
+  /**
+   * Load the cloud copy and apply it if it is newer than ours (and we have no unsaved edits, unless
+   * `force`). Returns what happened so a conflicting save knows whether it's safe to drop its edit.
+   */
+  async pull(force = false): Promise<'applied' | 'unchanged' | 'missing' | 'failed'> {
+    if (this.pending && !force) return 'unchanged'
     let row
     try {
       row = await this.store.load(this.userId)
     } catch {
-      return
+      return 'failed'
     }
-    if (!row || (!force && row.revision <= this.revision)) return
+    if (!row) {
+      if (force) this.revision = 0
+      return force ? 'missing' : 'unchanged'
+    }
+    if (!force && row.revision <= this.revision) return 'unchanged'
     const state = parseState(row.data)
-    if (!state) return
+    if (!state) return 'failed'
     this.revision = row.revision
     this.synced = JSON.stringify(state)
     writeMeta({ userId: this.userId, revision: this.revision, synced: this.synced })
     this.remoteListeners.forEach((l) => l(state))
+    return 'applied'
   }
 
   /** Retry right away (used when the browser comes back online). */
