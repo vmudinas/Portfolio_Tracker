@@ -30,8 +30,11 @@ own row. Visitors who aren't signed in can't read anything.
 
 ## 4. Connect the site
 
-1. **Project Settings → API Keys**: copy the **Project URL** and the **publishable** key (`sb_publishable_…`;
-   older projects call it the `anon` key). Never use the `secret` / `service_role` key in the app.
+1. Copy two values:
+   - **Project URL** — click the green **Connect** button in the top bar (it's listed there), or open
+     **Project Settings → Data API**. It looks like `https://abcdefghijklmnop.supabase.co`.
+   - **Publishable key** — **Project Settings → API Keys → Publishable key** (`sb_publishable_…`; older projects
+     call it the `anon` key). Never use the `secret` / `service_role` key in the app.
 2. In GitHub: **vmudinas/Portfolio_Tracker → Settings → Secrets and variables → Actions → Variables → New
    repository variable**, and add:
    - `SUPABASE_URL` = the Project URL
@@ -43,8 +46,9 @@ Security, not by hiding the key.
 
 ## 5. Create your account, then close sign-ups
 
-1. Open the site → **Create an account** with your email and a password (8+ characters). Click the link in the
-   confirmation email, then log in.
+1. Either open the site → **Create an account** with your email and a password (8+ characters) and click the link
+   in the confirmation email — or, in Supabase, **Authentication → Users → Add user → Create new user**, enter
+   your email and password and tick **Auto Confirm User**. Then log in on the site.
 2. On first login, whatever is in that browser (your existing funds) is copied into your account.
 3. Back in Supabase: **Authentication → Sign In / Providers → turn off "Allow new users to sign up"**
    (under the general user settings), so nobody else can create accounts on your project.
