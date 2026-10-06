@@ -139,20 +139,54 @@ export function parseState(raw: unknown): AppState | null {
   return { version: 1, activeProfileId, profiles, settings }
 }
 
-export function loadState(): AppState {
+type Backing = 'local' | 'session'
+let backing: Backing = 'local'
+const store = (b: Backing): Storage => (b === 'session' ? sessionStorage : localStorage)
+
+/**
+ * Where the app keeps its working copy. With a cloud account it's sessionStorage, so the data on
+ * this device disappears when the tab closes (the account holds the real copy).
+ */
+export function setStateStorage(b: Backing) {
+  backing = b
+}
+
+/** The state saved in local or session storage, or null if there is none / it's unreadable. */
+export function readStoredState(b: Backing = backing): AppState | null {
   try {
-    const text = localStorage.getItem(STORAGE_KEY)
-    if (text) return parseState(JSON.parse(text)) ?? defaultState()
+    const text = store(b).getItem(STORAGE_KEY)
+    return text ? parseState(JSON.parse(text)) : null
   } catch {
-    // corrupted JSON or storage unavailable (private mode) — start fresh
+    return null
   }
-  return defaultState()
+}
+
+export function loadState(): AppState {
+  // corrupted JSON or storage unavailable (private mode) — start fresh
+  return readStoredState() ?? defaultState()
 }
 
 export function saveState(state: AppState): void {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
+    store(backing).setItem(STORAGE_KEY, JSON.stringify(state))
   } catch {
     // storage full or blocked — app keeps working in memory
+  }
+}
+
+/** After moving to a cloud account: drop the old copy kept in localStorage. */
+export function removeLegacyLocalState() {
+  try {
+    localStorage.removeItem(STORAGE_KEY)
+  } catch {
+    /* ignore */
+  }
+}
+
+export function clearSessionState() {
+  try {
+    sessionStorage.removeItem(STORAGE_KEY)
+  } catch {
+    /* ignore */
   }
 }

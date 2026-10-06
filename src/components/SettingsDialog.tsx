@@ -4,6 +4,8 @@ import type { Theme } from '../hooks/useTheme'
 import { activeProfile } from '../state/reducer'
 import { DEFAULT_RISK_FREE } from '../lib/storage'
 import type { AppState, Book, Settings } from '../types'
+import { AccountSettings } from '../sync/AccountSettings'
+import { useSync } from '../sync/SyncContext'
 import { LoginSettings } from './auth/LoginSettings'
 import { Button, Field, inputClass, Modal } from './ui'
 
@@ -28,6 +30,7 @@ export function SettingsDialog({
   onClearAll,
   onClose,
 }: Props) {
+  const sync = useSync()
   const [apiKey, setApiKey] = useState(state.settings.finnhubApiKey ?? '')
   const [tdKey, setTdKey] = useState(state.settings.twelveDataApiKey ?? '')
   const [avKey, setAvKey] = useState(state.settings.alphaVantageApiKey ?? '')
@@ -91,7 +94,7 @@ export function SettingsDialog({
               >
                 finnhub.io/register
               </a>
-              . Stored only in this browser.
+              . {sync ? 'Saved to your account (only you can read it).' : 'Stored only in this browser.'}
             </>
           }
         >
@@ -196,6 +199,7 @@ export function SettingsDialog({
           </Button>
         </div>
 
+        <AccountSettings />
         <LoginSettings />
 
         <hr className="border-slate-200 dark:border-slate-800" />
