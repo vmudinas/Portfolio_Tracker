@@ -9,7 +9,9 @@ globalThis.ResizeObserver ??= class {
   disconnect() {}
 } as unknown as typeof ResizeObserver
 
+// Unmount first so no effect can write to storage after it has been cleared.
 afterEach(() => {
   cleanup()
   localStorage.clear()
+  sessionStorage.clear()
 })

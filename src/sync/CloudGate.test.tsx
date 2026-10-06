@@ -40,7 +40,6 @@ async function logIn(user: ReturnType<typeof userEvent.setup>, pw = PW) {
 }
 
 afterEach(() => {
-  sessionStorage.clear()
   setStateStorage('local')
 })
 
